@@ -1,0 +1,9 @@
+Package: com.primetweak.primedit
+Name: PrimeDit
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Filters Reddit's feeds and tidies its interface.
+Maintainer: PrimeTweak
+Author: PrimeTweak
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000)

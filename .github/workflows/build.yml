@@ -1,0 +1,207 @@
+name: Build
+run-name: ${{ inputs.build }} · ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "What to build"
+        type: choice
+        options:
+          - Debug
+          - Release
+        default: Debug
+      ipa_url:
+        description: "Reddit IPA link (optional, empty = latest from the App Store)"
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DEBUG_FLAG: ${{ inputs.build == 'Release' && '-DPRIMEDIT_DEBUG=0' || '-DPRIMEDIT_DEBUG=1' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        run: |
+          version=$(grep '^Version:' control | cut -d' ' -f2)
+          if ! echo "$version" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::No valid Version line in control."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check release
+        if: ${{ inputs.build == 'Release' }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          branch="${{ github.event.repository.default_branch }}"
+          if [ "${{ github.ref_name }}" != "$branch" ]; then
+            echo "::error::Releases are built from $branch only."
+            exit 1
+          fi
+          if gh api "repos/${{ github.repository }}/releases/tags/v$version" > /dev/null 2>&1; then
+            echo "::error::Version $version is already released. Change Version in control."
+            exit 1
+          fi
+          awk -v v="$version" '$0 == "## " v {found = 1; next} found && /^## / {exit} found {print}' \
+            CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no section for $version."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y rsync build-essential checkinstall git autoconf automake libtool-bin llvm xmlstarlet
+          curl -L https://github.com/libimobiledevice/libplist/releases/download/2.6.0/libplist-2.6.0.tar.bz2 | bzip2 -d | tar -x
+          cd libplist*
+          ./configure
+          sudo make install
+          sudo ldconfig
+
+      - name: Download IPA (App Store)
+        if: ${{ !inputs.ipa_url }}
+        uses: level3tjg/decryptedappstore-action@main
+        with:
+          appstore_url: "https://apps.apple.com/us/app/reddit/id1064216828"
+          cache: true
+          path: ${{ github.workspace }}/App.ipa
+          token: ${{ secrets.DECRYPTEDAPPSTORE_SESSION_TOKEN }}
+
+      - name: Download IPA (link)
+        if: ${{ inputs.ipa_url }}
+        run: |
+          curl -Lo "${{ github.workspace }}/App.ipa" "${{ inputs.ipa_url }}"
+          zip -T "${{ github.workspace }}/App.ipa"
+
+      - name: Read Reddit version
+        id: app
+        run: |
+          info=$(unzip -p "${{ github.workspace }}/App.ipa" Payload/*.app/Info.plist)
+          echo "version=$(echo $info | xmlstarlet sel -t -v "/plist/dict/key[text()=\"CFBundleShortVersionString\"]/following-sibling::*[1]/text()")" >> "$GITHUB_OUTPUT"
+
+      - name: Setup theos
+        uses: level3tjg/theos-action@main
+        with:
+          cache: true
+          cache-dir-theos: ${{ github.workspace }}/theos
+          cache-dir-sdks: ${{ github.workspace }}/theos/sdks
+
+      - name: Checkout theos-jailed
+        uses: actions/checkout@v4
+        with:
+          repository: level3tjg/theos-jailed
+          path: theos-jailed
+          submodules: recursive
+
+      - name: Install theos-jailed
+        run: ./theos-jailed/install
+
+      - name: Fetch fishhook
+        run: |
+          mkdir -p src/Sideload/fishhook
+          for file in fishhook.c fishhook.h; do
+            [ -f "src/Sideload/fishhook/$file" ] && continue
+            curl -fsSL -o "src/Sideload/fishhook/$file" \
+              "https://raw.githubusercontent.com/facebook/fishhook/aadc161ac3b80db07a9908851839a17ba63a9eb1/$file"
+          done
+
+      - name: Build rootless deb
+        if: ${{ inputs.build == 'Release' }}
+        run: make package
+        env:
+          FINALPACKAGE: 1
+          THEOS_PACKAGE_SCHEME: rootless
+          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
+
+      - name: Build rootful deb
+        if: ${{ inputs.build == 'Release' }}
+        run: make clean package
+        env:
+          FINALPACKAGE: 1
+          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
+
+      - name: Build IPA
+        run: make package
+        env:
+          FINALPACKAGE: 1
+          SIDELOADED: 1
+          IPA: ${{ github.workspace }}/App.ipa
+          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
+
+      - name: Name files
+        id: files
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          ipa="out/PrimeDit-$version-Reddit${{ steps.app.outputs.version }}-sideloaded.ipa"
+          mkdir -p out
+          mv packages/*.ipa "$ipa"
+          if [ "${{ inputs.build }}" = "Release" ]; then
+            mv packages/*_iphoneos-arm64.deb "out/PrimeDit-$version-rootless.deb"
+            mv packages/*_iphoneos-arm.deb "out/PrimeDit-$version-rootful.deb"
+          fi
+          echo "ipa=$ipa" >> "$GITHUB_OUTPUT"
+          ls -l out
+
+      - name: Check IPA
+        run: |
+          ipa="${{ steps.files.outputs.ipa }}"
+          dylib=$(unzip -l "$ipa" | grep -Eo "Payload/[^/]+\.app/.*PrimeDit\.dylib" | head -1)
+          if [ -z "$dylib" ]; then
+            echo "::error::PrimeDit.dylib is missing from the IPA."
+            exit 1
+          fi
+          unzip -p "$ipa" "$dylib" > ipa-dylib
+          if ! grep -aq "FakeGroupContainers" ipa-dylib; then
+            echo "::error::The sideload fixes are missing from PrimeDit.dylib."
+            exit 1
+          fi
+
+      - name: Check debs
+        if: ${{ inputs.build == 'Release' }}
+        run: |
+          for deb in out/*.deb; do
+            dpkg-deb --fsys-tarfile "$deb" | tar -xO --wildcards '*PrimeDit.dylib' > deb-dylib
+            if ! grep -aq "FakeGroupContainers" deb-dylib; then
+              echo "::error::The sideload fixes are missing from $deb."
+              exit 1
+            fi
+          done
+
+      - name: Publish debug draft
+        if: ${{ inputs.build == 'Debug' }}
+        run: |
+          for id in $(gh api "repos/${{ github.repository }}/releases" --paginate \
+                        --jq '.[] | select(.draft and .tag_name == "debug") | .id'); do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
+          done
+          gh release create debug "${{ steps.files.outputs.ipa }}" --draft --target "${{ github.sha }}" \
+            --title "PrimeDit ${{ steps.version.outputs.version }} · debug" --notes ""
+
+      - name: Publish release draft
+        if: ${{ inputs.build == 'Release' }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          for id in $(gh api "repos/${{ github.repository }}/releases" --paginate \
+                        --jq ".[] | select(.draft and .tag_name == \"v$version\") | .id"); do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
+          done
+          {
+            echo "For Reddit ${{ steps.app.outputs.version }} · iOS 16 or later"
+            echo
+            echo "## What's new"
+            echo
+            cat notes.md
+          } > body.md
+          gh release create "v$version" out/* --draft --target "${{ github.sha }}" \
+            --title "PrimeDit $version" --notes-file body.md
