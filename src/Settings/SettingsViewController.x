@@ -391,12 +391,12 @@ static UIView *PDCreditFooter(void) {
   }
   UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ name, credit ]];
   stack.axis = UILayoutConstraintAxisVertical;
-  stack.spacing = 1;
+  stack.spacing = -2;
   stack.translatesAutoresizingMaskIntoConstraints = NO;
   UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 100)];
   [footer addSubview:stack];
   [NSLayoutConstraint activateConstraints:@[
-    [stack.topAnchor constraintEqualToAnchor:footer.topAnchor constant:36],
+    [stack.topAnchor constraintEqualToAnchor:footer.topAnchor constant:21],
     [stack.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
     [stack.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-20],
   ]];
@@ -1093,7 +1093,7 @@ static NSArray<NSString *> *PDConfigKeys(void) {
     kPrimeDitThreadThemeIndex, kPrimeDitGamesTabDisabled, kPrimeDitLaunchTab,
     kPrimeDitProfileAccountSwitcher, kPrimeDitKeepFeedOnTabReturn, kPrimeDitConfirmHomeRefresh,
     kPrimeDitConfirmPullToRefresh, kPrimeDitChatTabDisabled, kPrimeDitLeftMenuHidden,
-    kPrimeDitAutoClearCache, kPrimeDitKeepTabBarExpanded
+    kPrimeDitAutoClearCache, kPrimeDitKeepTabBarExpanded, kPrimeDitFlexExplorer
   ];
 }
 
@@ -1959,8 +1959,10 @@ static char kPDSectionsKey;
 // happen. Help names a row by its key and adds one sentence for the info sheet.
 static NSArray *PDBuildMainSections(void) {
   NSMutableArray *tools = [NSMutableArray
-      arrayWithObject:PDLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
-                                @selector(pdOpenBackup))];
+      arrayWithObjects:PDToggleRow(@"FLEX explorer", nil, @[ @"rpl3/bug" ], kPrimeDitFlexExplorer, NO, NO),
+                       PDLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
+                                 @selector(pdOpenBackup)),
+                       nil];
 #if PRIMEDIT_DEBUG
   [tools addObject:PDLinkRow(@"Compatibility", nil, nil, @[ @"rpl3/verified" ], @selector(pdOpenCompatibility))];
 #endif

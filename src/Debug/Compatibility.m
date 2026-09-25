@@ -1,6 +1,11 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import "Compatibility.h"
+
+// Number of fleXD sources compiled in, set by the Makefile.
+#ifndef PD_FLEX_SOURCES
+#define PD_FLEX_SOURCES 0
+#endif
 #import "Preferences.h"
 
 #if PRIMEDIT_DEBUG
@@ -599,9 +604,10 @@ NSString *PDCompatReportText(void) {
   NSArray<PDCompatResult *> *results = PDCompatResults();
   NSDictionary *info = NSBundle.mainBundle.infoDictionary;
   NSMutableString *text = [NSMutableString
-      stringWithFormat:@"PrimeDit Compatibility \u00b7 Reddit %@ (%@) \u00b7 iOS %@\n%@\n%@\n",
+      stringWithFormat:@"PrimeDit Compatibility \u00b7 Reddit %@ (%@) \u00b7 iOS %@ \u00b7 fleXD %d sources\n%@\n%@\n",
                        info[@"CFBundleShortVersionString"], info[@"CFBundleVersion"],
-                       UIDevice.currentDevice.systemVersion, PDCompatRecordingText(), PDCompatSummary(results)];
+                       UIDevice.currentDevice.systemVersion, (int)PD_FLEX_SOURCES, PDCompatRecordingText(),
+                       PDCompatSummary(results)];
   NSString *section = nil;
   for (PDCompatResult *result in results) {
     if (![result.section isEqualToString:section]) {

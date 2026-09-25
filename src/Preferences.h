@@ -43,6 +43,7 @@ static inline BOOL PDPrefBool(NSString *key, BOOL fallback) {
 #define kPrimeDitLaunchTab @"kPrimeDitLaunchTab"
 #define kPrimeDitProfileAccountSwitcher @"kPrimeDitProfileAccountSwitcher"
 #define kPrimeDitKeepTabBarExpanded @"kPrimeDitKeepTabBarExpanded"
+#define kPrimeDitFlexExplorer @"kPrimeDitFlexExplorer"
 #define kPrimeDitChatTabDisabled @"kPrimeDitChatTabDisabled"
 #define kPrimeDitKeepFeedOnTabReturn @"kPrimeDitKeepFeedOnTabReturn"
 #define kPrimeDitConfirmHomeRefresh @"kPrimeDitConfirmHomeRefresh"
