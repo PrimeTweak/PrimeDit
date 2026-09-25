@@ -4,7 +4,7 @@
 #import "Preferences.h"
 #import "Compatibility.h"
 
-// Tab-bar and refresh options, ported from MoesReddit 4.3 (Reddit 2026.38).
+// Tab bar and refresh options (Reddit 2026.38).
 // The Chat tab splits Reddit's Inbox into two tabs that share one Inbox
 // instance; a container re-parents it on appear and flips its inner segment.
 
@@ -195,7 +195,7 @@ static NSInteger PDSegmentIndex(UIViewController *content) {
   return ((NSInteger (*)(id, SEL))objc_msgSend)(segment, indexSel);
 }
 
-// Flips the Inbox's inner segment to activity (0) or chat (1), as MoesReddit does; a
+// Flips the Inbox's inner segment to activity (0) or chat (1); a
 // just-built Inbox is loaded first so its segment exists before it is shown.
 static void PDNavigateInbox(UIViewController *content, NSInteger tag) {
   if (!content) return;
@@ -1010,7 +1010,7 @@ static BOOL PDShouldHoldRefresh(id receiver, id argument, PDRefreshHookKind kind
 }
 
 // Wraps a void method taking 0-2 object arguments that the class itself
-// implements, as MoesReddit does; anything else is left untouched.
+// implements; anything else is left untouched.
 static void PDSwizzleRefreshMethod(Class cls, SEL sel, PDRefreshHookKind kind) {
   if (!cls || !sel) return;
   Method method = class_getInstanceMethod(cls, sel);
@@ -1119,7 +1119,7 @@ static void PDInstallRefreshHooksIfNeeded(void) {
 #pragma mark - Tab bar minimizing
 
 // Reddit asks iOS to minimize its tab bar on scroll (setTabBarMinimizeBehavior:, measured in
-// Reddit 2026.38). With Keep tab bar expanded, every request becomes "never" (raw value 1);
+// Reddit 2026.38). With Compact tab bar off, every request becomes "never" (raw value 1);
 // Reddit's last request is kept so the option can be turned off again.
 static const NSInteger kPDMinimizeNever = 1;
 static NSInteger gRedditMinimizeBehavior = -1;
@@ -1229,7 +1229,7 @@ static void PDTabsPrefsChanged(CFNotificationCenterRef center, void *observer, C
 }
 %end
 
-// Reddit's own "hold You to switch accounts"; the option only lets it through or blocks it.
+// Reddit's own account switcher on a long press of You; the option lets it through or blocks it.
 %hook _TtC30MainTabBar_ProfileTabItem_Impl29ProfileTabItemViewModelImplV2
 - (void *)handleLongPress:(id)gesture {
   BOOL longPress = [gesture isKindOfClass:UILongPressGestureRecognizer.class];

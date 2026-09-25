@@ -141,7 +141,7 @@ extern "C" Class CoreClass(NSString *name) {
 }
 
 // Feed-unit type matching (recommendation carousels, discovery/trending cards,
-// AI answer boxes). Type-name lists ported from MoesReddit 4.3 (Reddit 2026.38).
+// AI answer boxes), with type names as of Reddit 2026.38.
 static BOOL PDTypeNameContainsAny(NSString *typeName, NSArray<NSString *> *needles) {
   for (NSString *needle in needles)
     if ([typeName containsString:needle]) return YES;
@@ -173,7 +173,7 @@ static NSString *PDTrimmedLowercase(NSString *s) {
   return [[s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
 }
 
-// Truthiness helpers matching MoesReddit: numbers use boolValue; strings are
+// Truthiness helpers: numbers use boolValue; strings are
 // trimmed and lower-cased, with a small set of falsey literals.
 static BOOL PDDictTruthy(id v) {
   if (!v || v == NSNull.null) return NO;
@@ -312,8 +312,8 @@ static BOOL PDJSONNodeIsNSFW(NSDictionary *node) {
   return NO;
 }
 
-// Option that removes one JSON object, or PDCompatOptionNone. Criteria ported from MoesReddit 4.3
-// (Reddit 2026.38); visited posts only apply to Home feed requests, as there.
+// Option that removes one JSON object, or PDCompatOptionNone (Reddit 2026.38); visited
+// posts only apply to Home feed requests.
 static PDCompatOption PDDropReasonForNode(NSDictionary *node, PrimeDitPrefs prefs, BOOL homeFeed) {
   NSString *t = node[@"__typename"];
   if (![t isKindOfClass:NSString.class]) t = @"";
@@ -400,7 +400,7 @@ static NSString *PDCompatItemType(NSDictionary *item) {
 }
 #endif
 
-// Recursive walk over the whole response, as MoesReddit does: filtered array
+// Recursive walk over the whole response: filtered array
 // elements are removed in place (containers are mutable), ad arrays emptied,
 // and direct replies to muted users' comments dropped with them.
 static void PDWalkJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {

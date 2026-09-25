@@ -3,8 +3,8 @@
 #import "Preferences.h"
 #import "Compatibility.h"
 
-// View-level options, ported from MoesReddit 4.3 (Reddit 2026.38): tips and
-// prompts, collapsed ad slots and AI summaries, and colored comment thread lines.
+// View-level options (Reddit 2026.38): pop-ups and nudges, collapsed ad slots and AI
+// summaries, and colored comment thread lines.
 
 static BOOL gHideNags;
 static BOOL gHidePromoted;
@@ -182,7 +182,7 @@ static void PDApplyNagView(UIView *view) {
 
 #pragma mark - Thread lines
 
-// Palettes in MoesReddit's index order, so exported settings stay compatible;
+// Palettes in stored index order, so exported settings stay compatible;
 // the settings page draws them as swatches.
 NSArray<UIColor *> *PDPaletteColors(NSInteger index) {
   static NSArray<NSArray<UIColor *> *> *palettes;
@@ -493,24 +493,6 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
     return;
   }
   %orig;
-}
-%end
-
-// With Tips & prompts hidden, the system permission request is answered "not
-// granted" without showing iOS's dialog, as MoesReddit does.
-%hook UNUserNotificationCenter
-- (void)requestAuthorizationWithOptions:(NSUInteger)options
-                      completionHandler:(void (^)(BOOL granted, NSError *error))completionHandler {
-  if (!gHideNags) {
-    %orig;
-    return;
-  }
-  PDCOMPAT_ACTION(PDCompatNags, @"Notification permission request declined");
-  if (completionHandler) {
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      completionHandler(NO, nil);
-    });
-  }
 }
 %end
 

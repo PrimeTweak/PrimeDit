@@ -116,15 +116,15 @@ static NSString *PDCompatTitle(PDCompatOption option) {
     case PDCompatVoteCounts: return @"Vote counts";
     case PDCompatAutoMod: return @"Collapse AutoMod comments";
     case PDCompatRemovedComments: return @"Deleted & removed comments";
-    case PDCompatChatTab: return @"Separate Chat from Inbox";
+    case PDCompatChatTab: return @"Chat tab";
     case PDCompatGamesTab: return @"Games tab";
     case PDCompatLaunchTab: return @"Launch tab";
-    case PDCompatHoldYou: return @"Hold You to switch accounts";
-    case PDCompatKeepTabBar: return @"Keep tab bar expanded";
-    case PDCompatKeepHomeFeed: return @"Keep Home where you left it";
+    case PDCompatHoldYou: return @"Account switcher";
+    case PDCompatKeepTabBar: return @"Compact tab bar";
+    case PDCompatKeepHomeFeed: return @"Remember Home position";
     case PDCompatConfirmHomeRefresh: return @"Confirm Home refresh";
     case PDCompatConfirmPullRefresh: return @"Confirm pull to refresh";
-    case PDCompatNags: return @"Tips & prompts";
+    case PDCompatNags: return @"Pop-ups & nudges";
     case PDCompatThreadLines: return @"Comment thread lines";
     case PDCompatLeftMenu: return @"Left menu";
     case PDCompatBackup: return @"Backup & reset";
@@ -304,7 +304,7 @@ static const PDCompatRequirement kPDCompatRequirements[] = {
     {PDCompatLeftMenu, "_TtC15CommunityDrawer29CommunityDrawerViewController", "viewDidAppear:"},
 };
 
-// The Keep Home option needs only one of these reload methods.
+// Remember Home position needs only one of these reload methods.
 static const PDCompatRequirement kPDCompatKeepFeedTargets[] = {
     {PDCompatKeepHomeFeed, "FeedPresenter", "fetchData"},
     {PDCompatKeepHomeFeed, "_TtC20FeedKit_LegacyBridge25BridgedFeedViewController", "fetchData"},

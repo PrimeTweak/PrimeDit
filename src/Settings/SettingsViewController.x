@@ -376,6 +376,33 @@ static void PDStyleSettingsTable(UITableView *tableView) {
   [tableView registerClass:PDSettingsCell.class forCellReuseIdentifier:@"PDSettingsCell"];
 }
 
+// Credit under the last section of the main page, in the system's light gray.
+static UIView *PDCreditFooter(void) {
+  UILabel *name = [[UILabel alloc] init];
+  name.text = @"PrimeDit";
+  name.font = PDSettingsFont(15, YES);
+  UILabel *credit = [[UILabel alloc] init];
+  credit.text = @"Original work by @level3tjg";
+  credit.font = PDSettingsFont(13, NO);
+  credit.numberOfLines = 0;
+  for (UILabel *label in @[ name, credit ]) {
+    label.textColor = UIColor.systemGray3Color;
+    label.textAlignment = NSTextAlignmentCenter;
+  }
+  UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[ name, credit ]];
+  stack.axis = UILayoutConstraintAxisVertical;
+  stack.spacing = 1;
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 100)];
+  [footer addSubview:stack];
+  [NSLayoutConstraint activateConstraints:@[
+    [stack.topAnchor constraintEqualToAnchor:footer.topAnchor constant:36],
+    [stack.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
+    [stack.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-20],
+  ]];
+  return footer;
+}
+
 static UIImage *PDRowIcon(NSArray<NSString *> *names) {
   for (NSString *name in names) {
     UIImage *image = iconWithName(name);
@@ -539,7 +566,7 @@ static void PDPresentHelpSheet(UIViewController *presenter, NSString *title, NSA
 
 #pragma mark - Comment thread lines page
 
-// Palette names in MoesReddit's stored index order; -1 keeps Reddit's color.
+// Palette names in stored index order; -1 keeps Reddit's color.
 static NSString *const kPDPaletteNames[15] = {
     @"Sunset", @"Cyberpunk", @"Synthwave", @"Matrix", @"Nord", @"Dracula", @"Gruvbox", @"Tokyo Night",
     @"Rose Pine", @"Solarized", @"Neon", @"Ocean", @"Pastel", @"Mono", @"Rainbow"};
@@ -572,7 +599,7 @@ static NSString *PDThreadLinesSummary(void) {
   return PDPaletteName(PDCurrentPaletteIndex());
 }
 
-// Line coloring, stored as MoesReddit's rainbow and depth-cycling switches.
+// Line coloring, stored as the rainbow and depth-cycling switches.
 typedef NS_ENUM(NSInteger, PDLineColoring) {
   PDLineColoringByDepth,
   PDLineColoringSingle,
@@ -1044,7 +1071,7 @@ static NSString *PDListValue(NSString *listKey) {
 
 #pragma mark - Launch tab
 
-// Stored index order matches MoesReddit; Chat opens Inbox until a Chat tab exists.
+// Stored index order; Chat opens Inbox until a Chat tab exists.
 static NSString *const kPDLaunchTabNames[5] = {@"Default", @"Home", @"Inbox", @"Chat", @"You"};
 
 static NSString *PDLaunchTabName(void) {
@@ -2001,36 +2028,36 @@ static NSArray *PDBuildMainSections(void) {
     @{
       @"title" : @"Interface",
       @"rows" : @[
-        PDToggleRow(@"Tips & prompts", nil, @[ @"rpl3/lightbulb" ], kPrimeDitHideNags, YES, NO),
+        PDToggleRow(@"Pop-ups & nudges", nil, @[ @"rpl3/lightbulb" ], kPrimeDitHideNags, YES, NO),
         PDLinkRow(@"Left menu", nil, PDLeftMenuSummary(), @[ @"rpl3/menu" ], @selector(pdOpenLeftMenu)),
       ],
       @"help" : @[ @[
-        kPrimeDitHideNags, @"Tooltips, upgrade offers, nudges and \u201Cturn on notifications\u201D prompts."
+        kPrimeDitHideNags,
+        @"Tooltips, Reddit Pro offers, nudges to post and prompts to turn on notifications."
       ] ],
     },
     @{
       @"title" : @"Tabs",
       @"rows" : @[
-        PDToggleRow(@"Separate Chat from Inbox", nil, @[ @"rpl3/chat", @"rpl3/message" ],
-                    kPrimeDitChatTabDisabled, YES, YES),
+        PDToggleRow(@"Chat tab", nil, @[ @"rpl3/chat", @"rpl3/message" ], kPrimeDitChatTabDisabled, YES, YES),
         PDToggleRow(@"Games tab", nil, @[ @"rpl3/gameController" ], kPrimeDitGamesTabDisabled, YES, NO),
         PDLinkRow(@"Launch tab", nil, PDLaunchTabName(), @[ @"rpl3/rocket", @"rpl3/home" ],
                   @selector(pdChooseLaunchTab)),
-        PDToggleRow(@"Hold You to switch accounts", nil, @[ @"rpl3/users", @"rpl3/user" ],
-                    kPrimeDitProfileAccountSwitcher, NO, YES),
-        PDToggleRow(@"Keep tab bar expanded", nil, @[ @"rpl3/expandRight" ], kPrimeDitKeepTabBarExpanded, NO,
-                    NO),
+        PDToggleRow(@"Account switcher", nil, @[ @"rpl3/users", @"rpl3/user" ], kPrimeDitProfileAccountSwitcher, NO,
+                    YES),
+        PDToggleRow(@"Compact tab bar", nil, @[ @"rpl3/collapseRight" ], kPrimeDitKeepTabBarExpanded, YES, NO),
       ],
       @"help" : @[
         @[ kPrimeDitChatTabDisabled, @"Chat gets its own tab; Inbox keeps your notifications." ],
-        @[ kPrimeDitKeepTabBarExpanded, @"The tab bar stays full size when you scroll instead of shrinking." ],
+        @[ kPrimeDitProfileAccountSwitcher, @"Long-press the You tab to switch accounts." ],
+        @[ kPrimeDitKeepTabBarExpanded, @"Reddit shrinks the tab bar as you scroll. Off, it stays full size." ],
       ],
     },
     @{
       @"title" : @"Refresh",
       @"rows" : @[
-        PDToggleRow(@"Keep Home where you left it", nil, @[ @"rpl3/pin", @"rpl3/home" ],
-                    kPrimeDitKeepFeedOnTabReturn, NO, NO),
+        PDToggleRow(@"Remember Home position", nil, @[ @"rpl3/pin", @"rpl3/home" ], kPrimeDitKeepFeedOnTabReturn, NO,
+                    NO),
         PDToggleRow(@"Confirm Home refresh", nil, @[ @"rpl3/refresh" ], kPrimeDitConfirmHomeRefresh, NO, NO),
         PDToggleRow(@"Confirm pull to refresh", nil, @[ @"rpl3/swipeDown", @"rpl3/refresh" ],
                     kPrimeDitConfirmPullToRefresh, NO, NO),
@@ -2144,6 +2171,7 @@ static NSArray *PDBuildMainSections(void) {
   self.title = @"PrimeDit";
   self.view.backgroundColor = UIColor.systemBackgroundColor;
   PDStyleSettingsTable(self.tableView);
+  self.tableView.tableFooterView = PDCreditFooter();
 }
 - (void)viewWillAppear:(BOOL)animated {
   %orig;
