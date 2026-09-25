@@ -1,4 +1,4 @@
-name: Build
+name: Build PrimeDit
 run-name: ${{ inputs.build }} · ${{ github.ref_name }}
 
 on:
