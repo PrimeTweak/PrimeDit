@@ -18,7 +18,8 @@ re-signed app.
 
 ## Build
 
-Actions → **Build** → Run workflow:
+Actions → **Build** → Run workflow. The IPA link is optional: left empty, the latest Reddit comes
+from the App Store.
 
 - **Debug**: IPA with the Compatibility tools, in the `debug` draft release
 - **Release** (default branch only): IPA and debs, in a draft release to publish

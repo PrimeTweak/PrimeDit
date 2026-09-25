@@ -5,8 +5,8 @@
 
 // A stored switch, or `fallback` when the option was never set.
 static inline BOOL PDPrefBool(NSString *key, BOOL fallback) {
-  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-  return [defaults objectForKey:key] ? [defaults boolForKey:key] : fallback;
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    return [defaults objectForKey:key] ? [defaults boolForKey:key] : fallback;
 }
 
 #define kPrimeDitPromoted @"kPrimeDitPromoted"

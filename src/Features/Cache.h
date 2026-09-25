@@ -4,10 +4,10 @@
 // feed stores. Login and settings live elsewhere and are never touched.
 
 typedef NS_ENUM(NSInteger, PDAutoClear) {
-  PDAutoClearOff = 0,
-  PDAutoClearEveryLaunch,
-  PDAutoClearDaily,
-  PDAutoClearWeekly,
+    PDAutoClearOff = 0,
+    PDAutoClearEveryLaunch,
+    PDAutoClearDaily,
+    PDAutoClearWeekly,
 };
 
 static const NSInteger PDAutoClearCount = 4;

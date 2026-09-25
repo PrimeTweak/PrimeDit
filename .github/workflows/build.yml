@@ -12,19 +12,26 @@ on:
           - Release
         default: Debug
       ipa_url:
-        description: "Reddit IPA link (optional, empty = latest from the App Store)"
+        description: "Decrypted Reddit IPA link (empty = latest from the App Store)"
         type: string
         required: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # The Reddit IPA is fetched on Linux, where the App Store download action is known to run,
-  # then handed to the macOS build.
+  # The App Store download runs on Linux, where its action is known to work; the IPA is
+  # handed to the macOS build.
   ipa:
     runs-on: ubuntu-22.04
     steps:
+      - name: Hide sensitive inputs
+        uses: levibostian/action-hide-sensitive-inputs@v1
+
       - name: Download IPA (App Store)
         if: ${{ !inputs.ipa_url }}
         uses: level3tjg/decryptedappstore-action@main
@@ -37,13 +44,13 @@ jobs:
       - name: Download IPA (link)
         if: ${{ inputs.ipa_url }}
         run: |
-          curl -Lo "${{ github.workspace }}/App.ipa" "${{ inputs.ipa_url }}"
-          zip -T "${{ github.workspace }}/App.ipa"
+          curl -fsSL -o App.ipa "${{ inputs.ipa_url }}"
+          zip -T App.ipa
 
       - name: Hand over IPA
         uses: actions/upload-artifact@v4
         with:
-          name: reddit-ipa
+          name: app-ipa
           path: App.ipa
           retention-days: 1
           compression-level: 0
@@ -54,53 +61,58 @@ jobs:
     runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      DEBUG_FLAG: ${{ inputs.build == 'Release' && '-DPRIMEDIT_DEBUG=0' || '-DPRIMEDIT_DEBUG=1' }}
+      PRIME_DEBUG: ${{ inputs.build == 'Release' && '0' || '1' }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Read version
-        id: version
         run: |
           version=$(grep '^Version:' control | cut -d' ' -f2)
           if ! echo "$version" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
             echo "::error::No valid Version line in control."
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          ios=$(sed -nE 's/^TARGET.*:([0-9]+(\.[0-9]+)*)[[:space:]]*$/\1/p' Makefile)
+          if [ -z "$ios" ]; then
+            echo "::error::No deployment target at the end of the Makefile TARGET line."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "IOS_MIN=$ios" >> "$GITHUB_ENV"
 
+      # A release is built from the default branch only, never twice for the same version,
+      # and only once CHANGELOG.md has a section for it.
       - name: Check release
         if: ${{ inputs.build == 'Release' }}
         run: |
-          version="${{ steps.version.outputs.version }}"
           branch="${{ github.event.repository.default_branch }}"
           if [ "${{ github.ref_name }}" != "$branch" ]; then
             echo "::error::Releases are built from $branch only."
             exit 1
           fi
-          if gh api "repos/${{ github.repository }}/releases/tags/v$version" > /dev/null 2>&1; then
-            echo "::error::Version $version is already released. Change Version in control."
+          if gh api "repos/${{ github.repository }}/releases/tags/v$VERSION" > /dev/null 2>&1; then
+            echo "::error::Version $VERSION is already released. Change Version in control."
             exit 1
           fi
-          awk -v v="$version" '$0 == "## " v {found = 1; next} found && /^## / {exit} found {print}' \
+          awk -v v="$VERSION" '$0 == "## " v {found = 1; next} found && /^## / {exit} found {print}' \
             CHANGELOG.md > notes.md
           if ! grep -q '[^[:space:]]' notes.md; then
-            echo "::error::CHANGELOG.md has no section for $version."
+            echo "::error::CHANGELOG.md has no section for $VERSION."
             exit 1
           fi
 
       - name: Receive IPA
         uses: actions/download-artifact@v4
         with:
-          name: reddit-ipa
+          name: app-ipa
           path: ${{ github.workspace }}
 
       - name: Read Reddit version
-        id: app
         run: |
           plist=$(unzip -Z1 App.ipa | grep -E '^Payload/[^/]+\.app/Info\.plist$' | head -1)
           unzip -p App.ipa "$plist" > app-info.plist
-          echo "version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' app-info.plist)" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' app-info.plist)" >> "$GITHUB_ENV"
 
       # The installer ends by fetching SDKs unauthenticated, which can hit the rate limit after
       # the clone has succeeded; that failure is tolerated and the clone is checked instead.
@@ -112,7 +124,6 @@ jobs:
             echo "::error::Theos clone incomplete"; exit 1
           fi
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
-          echo "Theos clone OK"
 
       - name: Ensure iOS 16.5 SDK
         run: |
@@ -129,43 +140,22 @@ jobs:
           fi
           ls -1 "$THEOS/sdks"
 
-      - name: Fetch fishhook
-        run: |
-          mkdir -p src/Sideload/fishhook
-          for file in fishhook.c fishhook.h; do
-            [ -f "src/Sideload/fishhook/$file" ] && continue
-            curl -fsSL -o "src/Sideload/fishhook/$file" \
-              "https://raw.githubusercontent.com/facebook/fishhook/aadc161ac3b80db07a9908851839a17ba63a9eb1/$file"
-          done
-
-      - name: Build rootless deb
-        if: ${{ inputs.build == 'Release' }}
-        run: make package
-        env:
-          FINALPACKAGE: 1
-          THEOS_PACKAGE_SCHEME: rootless
-          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
-
-      - name: Build rootful deb
-        if: ${{ inputs.build == 'Release' }}
-        run: make clean package
-        env:
-          FINALPACKAGE: 1
-          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
-
       - name: Build dylib
         run: |
           make clean || true
-          make
+          make FINALPACKAGE=1 PRIME_DEBUG=$PRIME_DEBUG
           dylib=$(find .theos -name 'PrimeDit.dylib' | head -1)
           if [ -z "$dylib" ]; then echo "::error::dylib not produced"; exit 1; fi
           mkdir -p dylib
           cp "$dylib" dylib/PrimeDit.dylib
           lipo -info dylib/PrimeDit.dylib
-          otool -L dylib/PrimeDit.dylib || true
-        env:
-          FINALPACKAGE: 1
-          ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
+
+      - name: Build debs
+        if: ${{ inputs.build == 'Release' }}
+        run: |
+          make clean package FINALPACKAGE=1 PRIME_DEBUG=$PRIME_DEBUG THEOS_PACKAGE_SCHEME=rootless
+          make clean package FINALPACKAGE=1 PRIME_DEBUG=$PRIME_DEBUG
+          ls -l packages
 
       - name: Install cyan
         run: |
@@ -174,34 +164,34 @@ jobs:
           /tmp/cyanenv/bin/python -m pip install \
             https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
 
-      # The input IPA keeps its own signature, so nothing is re-signed; only the dylib is added.
+      # The input IPA keeps its own signature, so nothing is re-signed; only dylibs are added.
       - name: Inject
         run: |
           mkdir -p out
           /tmp/cyanenv/bin/cyan -i App.ipa -o out/PrimeDit.ipa -f dylib/PrimeDit.dylib -u -w -e
 
       - name: Name files
-        id: files
         run: |
-          version="${{ steps.version.outputs.version }}"
-          ipa="out/PrimeDit-$version-Reddit${{ steps.app.outputs.version }}-sideloaded.ipa"
+          suffix=""
+          if [ "${{ inputs.build }}" = "Debug" ]; then suffix="$suffix-debug"; fi
+          ipa="out/PrimeDit-$VERSION-Reddit-$APP_VERSION$suffix.ipa"
           mv out/PrimeDit.ipa "$ipa"
+          echo "IPA=$ipa" >> "$GITHUB_ENV"
           if [ "${{ inputs.build }}" = "Release" ]; then
-            mv packages/*_iphoneos-arm64.deb "out/PrimeDit-$version-rootless.deb"
-            mv packages/*_iphoneos-arm.deb "out/PrimeDit-$version-rootful.deb"
+            mv packages/*_iphoneos-arm64.deb "out/PrimeDit-$VERSION-rootless.deb"
+            mv packages/*_iphoneos-arm.deb "out/PrimeDit-$VERSION-rootful.deb"
           fi
-          echo "ipa=$ipa" >> "$GITHUB_OUTPUT"
           ls -l out
 
       - name: Check IPA
         run: |
-          ipa="${{ steps.files.outputs.ipa }}"
-          dylib=$(unzip -l "$ipa" | grep -Eo "Payload/[^/]+\.app/.*PrimeDit\.dylib" | head -1)
-          if [ -z "$dylib" ]; then
-            echo "::error::PrimeDit.dylib is missing from the IPA."
-            exit 1
-          fi
-          unzip -p "$ipa" "$dylib" > ipa-dylib
+          for lib in PrimeDit.dylib; do
+            if ! unzip -Z1 "$IPA" | grep -q "/$lib\$"; then
+              echo "::error::$lib is missing from the IPA."
+              exit 1
+            fi
+          done
+          unzip -p "$IPA" "$(unzip -Z1 "$IPA" | grep '/PrimeDit\.dylib$' | head -1)" > ipa-dylib
           if ! grep -aq "FakeGroupContainers" ipa-dylib; then
             echo "::error::The sideload fixes are missing from PrimeDit.dylib."
             exit 1
@@ -215,6 +205,10 @@ jobs:
             (cd debx && ar -x "../$deb")
             data=$(ls debx/data.tar.* | head -1)
             tar -xOf "$data" '*PrimeDit.dylib' > deb-dylib
+            if [ ! -s deb-dylib ]; then
+              echo "::error::PrimeDit.dylib is missing from $deb."
+              exit 1
+            fi
             if ! grep -aq "FakeGroupContainers" deb-dylib; then
               echo "::error::The sideload fixes are missing from $deb."
               exit 1
@@ -228,23 +222,22 @@ jobs:
                         --jq '.[] | select(.draft and .tag_name == "debug") | .id'); do
             gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
           done
-          gh release create debug "${{ steps.files.outputs.ipa }}" --draft --target "${{ github.sha }}" \
-            --title "PrimeDit ${{ steps.version.outputs.version }} · debug" --notes ""
+          gh release create debug "$IPA" --draft --target "${{ github.sha }}" \
+            --title "PrimeDit $VERSION · debug" --notes "For Reddit $APP_VERSION · iOS $IOS_MIN or later"
 
       - name: Publish release draft
         if: ${{ inputs.build == 'Release' }}
         run: |
-          version="${{ steps.version.outputs.version }}"
           for id in $(gh api "repos/${{ github.repository }}/releases" --paginate \
-                        --jq ".[] | select(.draft and .tag_name == \"v$version\") | .id"); do
+                        --jq ".[] | select(.draft and .tag_name == \"v$VERSION\") | .id"); do
             gh api -X DELETE "repos/${{ github.repository }}/releases/$id"
           done
           {
-            echo "For Reddit ${{ steps.app.outputs.version }} · iOS 16 or later"
+            echo "For Reddit $APP_VERSION · iOS $IOS_MIN or later"
             echo
             echo "## What's new"
             echo
             cat notes.md
           } > body.md
-          gh release create "v$version" out/* --draft --target "${{ github.sha }}" \
-            --title "PrimeDit $version" --notes-file body.md
+          gh release create "v$VERSION" out/* --draft --target "${{ github.sha }}" \
+            --title "PrimeDit $VERSION" --notes-file body.md

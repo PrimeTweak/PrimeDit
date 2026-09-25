@@ -3,17 +3,12 @@
 // Tracks the filter's fixed JSON addresses in Reddit's GraphQL responses and,
 // when one misses, finds where the data moved, for the Compatibility report.
 
-#ifndef PRIMEDIT_DEBUG
-// Debug unless the build says otherwise; the workflow sets 1 for Debug, 0 for Release.
-#define PRIMEDIT_DEBUG 1
-#endif
-
 // Shape of the data expected at an address, which guides the search on a miss.
 typedef NS_ENUM(NSInteger, PDDataShape) {
-  PDDataShapeEdges = 0,   // array of `{ node: {...} }` (Home and Popular feeds)
-  PDDataShapeTrees,       // array of comment-forest trees `{ node: {...} }`
-  PDDataShapeNodeArray,   // array of post nodes, each with a `__typename`
-  PDDataShapeCommentsAds, // array of comment ads, often empty
+    PDDataShapeEdges = 0,   // array of `{ node: {...} }` (Home and Popular feeds)
+    PDDataShapeTrees,       // array of comment-forest trees `{ node: {...} }`
+    PDDataShapeNodeArray,   // array of post nodes, each with a `__typename`
+    PDDataShapeCommentsAds, // array of comment ads, often empty
 };
 
 #if PRIMEDIT_DEBUG
