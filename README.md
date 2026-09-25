@@ -9,6 +9,7 @@ Filters Reddit's feeds and tidies its interface. Built for Reddit 2026.38.
 - **Tabs**: Chat tab, Games tab, launch tab, account switcher, compact tab bar
 - **Refresh**: remember Home position, confirm Home and pull-to-refresh reloads
 - **Backup and reset** of all settings, cache size and auto-clear
+- **FLEX explorer** (fleXD), included in every build
 
 Settings are in Reddit's Settings, under the **PrimeDit** button.
 

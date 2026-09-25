@@ -10,5 +10,6 @@
 - Remember Home position; confirm Home and pull-to-refresh reloads
 - Colored comment thread lines with palettes
 - Backup and reset page, with the cache size and auto-clear at launch, daily or weekly
+- FLEX explorer (fleXD 6.1.0), included in every build
 - Username sign-in fixed on sideloaded builds
 - The .deb also works injected into an IPA: sideload fixes turn on only in a re-signed app
