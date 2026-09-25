@@ -129,16 +129,6 @@ jobs:
           fi
           ls -1 "$THEOS/sdks"
 
-      - name: Checkout theos-jailed
-        uses: actions/checkout@v4
-        with:
-          repository: level3tjg/theos-jailed
-          path: theos-jailed
-          submodules: recursive
-
-      - name: Install theos-jailed
-        run: ./theos-jailed/install
-
       - name: Fetch fishhook
         run: |
           mkdir -p src/Sideload/fishhook
@@ -163,21 +153,39 @@ jobs:
           FINALPACKAGE: 1
           ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
 
-      - name: Build IPA
-        run: make package
+      - name: Build dylib
+        run: |
+          make clean || true
+          make
+          dylib=$(find .theos -name 'PrimeDit.dylib' | head -1)
+          if [ -z "$dylib" ]; then echo "::error::dylib not produced"; exit 1; fi
+          mkdir -p dylib
+          cp "$dylib" dylib/PrimeDit.dylib
+          lipo -info dylib/PrimeDit.dylib
+          otool -L dylib/PrimeDit.dylib || true
         env:
           FINALPACKAGE: 1
-          SIDELOADED: 1
-          IPA: ${{ github.workspace }}/App.ipa
           ADDITIONAL_CFLAGS: ${{ env.DEBUG_FLAG }}
+
+      - name: Install cyan
+        run: |
+          python3 -m venv /tmp/cyanenv
+          /tmp/cyanenv/bin/python -m pip install --upgrade pip
+          /tmp/cyanenv/bin/python -m pip install \
+            https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
+
+      # The input IPA keeps its own signature, so nothing is re-signed; only the dylib is added.
+      - name: Inject
+        run: |
+          mkdir -p out
+          /tmp/cyanenv/bin/cyan -i App.ipa -o out/PrimeDit.ipa -f dylib/PrimeDit.dylib -u -w -e
 
       - name: Name files
         id: files
         run: |
           version="${{ steps.version.outputs.version }}"
           ipa="out/PrimeDit-$version-Reddit${{ steps.app.outputs.version }}-sideloaded.ipa"
-          mkdir -p out
-          mv packages/*.ipa "$ipa"
+          mv out/PrimeDit.ipa "$ipa"
           if [ "${{ inputs.build }}" = "Release" ]; then
             mv packages/*_iphoneos-arm64.deb "out/PrimeDit-$version-rootless.deb"
             mv packages/*_iphoneos-arm.deb "out/PrimeDit-$version-rootful.deb"

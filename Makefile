@@ -16,11 +16,6 @@ INSTALL_TARGET_PROCESSES = RedditApp Reddit
 
 ARCHS = arm64
 
-ifeq ($(SIDELOADED),1)
-  export MODULES = jailed
-  CODESIGN_IPA = 0
-endif
-
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = PrimeDit
