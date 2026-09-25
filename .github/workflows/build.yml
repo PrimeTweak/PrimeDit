@@ -20,8 +20,38 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # The Reddit IPA is fetched on Linux, where the App Store download action is known to run,
+  # then handed to the macOS build.
+  ipa:
     runs-on: ubuntu-22.04
+    steps:
+      - name: Download IPA (App Store)
+        if: ${{ !inputs.ipa_url }}
+        uses: level3tjg/decryptedappstore-action@main
+        with:
+          appstore_url: "https://apps.apple.com/us/app/reddit/id1064216828"
+          cache: true
+          path: ${{ github.workspace }}/App.ipa
+          token: ${{ secrets.DECRYPTEDAPPSTORE_SESSION_TOKEN }}
+
+      - name: Download IPA (link)
+        if: ${{ inputs.ipa_url }}
+        run: |
+          curl -Lo "${{ github.workspace }}/App.ipa" "${{ inputs.ipa_url }}"
+          zip -T "${{ github.workspace }}/App.ipa"
+
+      - name: Hand over IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-ipa
+          path: App.ipa
+          retention-days: 1
+          compression-level: 0
+
+  # macOS carries Xcode's iOS 26 SDK, which fleXD needs; the Makefile links it into Theos.
+  build:
+    needs: ipa
+    runs-on: macos-latest
     env:
       GH_TOKEN: ${{ github.token }}
       DEBUG_FLAG: ${{ inputs.build == 'Release' && '-DPRIMEDIT_DEBUG=0' || '-DPRIMEDIT_DEBUG=1' }}
@@ -59,43 +89,45 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y rsync build-essential checkinstall git autoconf automake libtool-bin llvm xmlstarlet
-          curl -L https://github.com/libimobiledevice/libplist/releases/download/2.6.0/libplist-2.6.0.tar.bz2 | bzip2 -d | tar -x
-          cd libplist*
-          ./configure
-          sudo make install
-          sudo ldconfig
-
-      - name: Download IPA (App Store)
-        if: ${{ !inputs.ipa_url }}
-        uses: level3tjg/decryptedappstore-action@main
+      - name: Receive IPA
+        uses: actions/download-artifact@v4
         with:
-          appstore_url: "https://apps.apple.com/us/app/reddit/id1064216828"
-          cache: true
-          path: ${{ github.workspace }}/App.ipa
-          token: ${{ secrets.DECRYPTEDAPPSTORE_SESSION_TOKEN }}
-
-      - name: Download IPA (link)
-        if: ${{ inputs.ipa_url }}
-        run: |
-          curl -Lo "${{ github.workspace }}/App.ipa" "${{ inputs.ipa_url }}"
-          zip -T "${{ github.workspace }}/App.ipa"
+          name: reddit-ipa
+          path: ${{ github.workspace }}
 
       - name: Read Reddit version
         id: app
         run: |
-          info=$(unzip -p "${{ github.workspace }}/App.ipa" Payload/*.app/Info.plist)
-          echo "version=$(echo $info | xmlstarlet sel -t -v "/plist/dict/key[text()=\"CFBundleShortVersionString\"]/following-sibling::*[1]/text()")" >> "$GITHUB_OUTPUT"
+          plist=$(unzip -Z1 App.ipa | grep -E '^Payload/[^/]+\.app/Info\.plist$' | head -1)
+          unzip -p App.ipa "$plist" > app-info.plist
+          echo "version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' app-info.plist)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup theos
-        uses: level3tjg/theos-action@main
-        with:
-          cache: true
-          cache-dir-theos: ${{ github.workspace }}/theos
-          cache-dir-sdks: ${{ github.workspace }}/theos/sdks
+      # The installer ends by fetching SDKs unauthenticated, which can hit the rate limit after
+      # the clone has succeeded; that failure is tolerated and the clone is checked instead.
+      - name: Install Theos
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos -o /tmp/install-theos
+          bash /tmp/install-theos || echo "installer exited non-zero (SDK fetch); verifying clone"
+          if [ ! -f "$HOME/theos/makefiles/common.mk" ]; then
+            echo "::error::Theos clone incomplete"; exit 1
+          fi
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+          echo "Theos clone OK"
+
+      - name: Ensure iOS 16.5 SDK
+        run: |
+          if [ -d "$THEOS/sdks/iPhoneOS16.5.sdk" ]; then
+            echo "SDK already present"
+          else
+            curl -fsSL -H "Authorization: token ${{ github.token }}" \
+              -o /tmp/sdks.tar.gz \
+              https://codeload.github.com/theos/sdks/tar.gz/refs/heads/master
+            mkdir -p /tmp/sdks
+            tar -xzf /tmp/sdks.tar.gz -C /tmp/sdks --strip-components=1
+            mkdir -p "$THEOS/sdks"
+            mv /tmp/sdks/iPhoneOS16.5.sdk "$THEOS/sdks/"
+          fi
+          ls -1 "$THEOS/sdks"
 
       - name: Checkout theos-jailed
         uses: actions/checkout@v4
@@ -171,7 +203,10 @@ jobs:
         if: ${{ inputs.build == 'Release' }}
         run: |
           for deb in out/*.deb; do
-            dpkg-deb --fsys-tarfile "$deb" | tar -xO --wildcards '*PrimeDit.dylib' > deb-dylib
+            rm -rf debx && mkdir debx
+            (cd debx && ar -x "../$deb")
+            data=$(ls debx/data.tar.* | head -1)
+            tar -xOf "$data" '*PrimeDit.dylib' > deb-dylib
             if ! grep -aq "FakeGroupContainers" deb-dylib; then
               echo "::error::The sideload fixes are missing from $deb."
               exit 1
