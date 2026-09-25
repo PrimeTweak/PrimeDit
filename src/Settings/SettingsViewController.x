@@ -1550,40 +1550,51 @@ static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
 
 static UIView *PDReportCount(NSInteger count, NSString *label, UIColor *color) {
   UILabel *number = [[UILabel alloc] init];
-  number.font = PDSettingsFont(17.0, YES);
+  number.font = PDSettingsFont(20.0, YES);
   number.textColor = color;
+  number.textAlignment = NSTextAlignmentCenter;
   number.text = [NSString stringWithFormat:@"%ld", (long)count];
   UILabel *caption = [[UILabel alloc] init];
-  caption.font = PDSettingsFont(12.0, NO);
+  caption.font = PDSettingsFont(11.0, NO);
   caption.textColor = PDSecondaryColor();
+  caption.textAlignment = NSTextAlignmentCenter;
   caption.text = label;
-  UIStackView *tile = [[UIStackView alloc] initWithArrangedSubviews:@[ number, caption ]];
-  tile.axis = UILayoutConstraintAxisVertical;
-  tile.spacing = 1.0;
-  tile.layoutMarginsRelativeArrangement = YES;
-  tile.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(8.0, 10.0, 8.0, 10.0);
+  UIView *tile = [[UIView alloc] init];
   tile.backgroundColor = UIColor.secondarySystemBackgroundColor;
   tile.layer.cornerRadius = 10.0;
+  for (UILabel *text in @[ number, caption ]) {
+    text.translatesAutoresizingMaskIntoConstraints = NO;
+    [tile addSubview:text];
+    [NSLayoutConstraint activateConstraints:@[
+      [text.leadingAnchor constraintEqualToAnchor:tile.leadingAnchor],
+      [text.trailingAnchor constraintEqualToAnchor:tile.trailingAnchor],
+    ]];
+  }
+  [NSLayoutConstraint activateConstraints:@[
+    [tile.heightAnchor constraintEqualToConstant:58.0],
+    [number.topAnchor constraintEqualToAnchor:tile.topAnchor constant:8.0],
+    [number.heightAnchor constraintEqualToConstant:24.0],
+    [caption.topAnchor constraintEqualToAnchor:tile.topAnchor constant:34.0],
+    [caption.heightAnchor constraintEqualToConstant:14.0],
+  ]];
   return tile;
 }
 
-// Report summary: verdict disc and headline for this Reddit version, then one
-// tile per verdict.
+// Report summary: a centered verdict disc, headline and recording line, then one tile per verdict.
 static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
   NSInteger counts[4] = {0, 0, 0, 0};
   for (PDCompatResult *result in results)
     if (result.verdict >= PDCompatVerdictOff && result.verdict <= PDCompatVerdictBroken) counts[result.verdict]++;
   NSInteger broken = counts[PDCompatVerdictBroken];
-  NSInteger working = counts[PDCompatVerdictWorking];
   NSString *version = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"";
   UIColor *tone = broken ? UIColor.systemRedColor : UIColor.systemGreenColor;
 
   UIView *disc = [[UIView alloc] init];
   disc.backgroundColor = [tone colorWithAlphaComponent:0.14];
-  disc.layer.cornerRadius = 20.0;
+  disc.layer.cornerRadius = 30.0;
   disc.translatesAutoresizingMaskIntoConstraints = NO;
   UIImageSymbolConfiguration *markSize =
-      [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightBold];
+      [UIImageSymbolConfiguration configurationWithPointSize:26.0 weight:UIImageSymbolWeightBold];
   UIImageView *mark =
       [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:(broken ? @"xmark" : @"checkmark")
                                                   withConfiguration:markSize]];
@@ -1594,6 +1605,7 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
   UILabel *headline = [[UILabel alloc] init];
   headline.font = PDSettingsFont(17.0, YES);
   headline.textColor = PDPrimaryColor();
+  headline.textAlignment = NSTextAlignmentCenter;
   headline.numberOfLines = 0;
   headline.text = broken ? [NSString stringWithFormat:@"%ld problem%@ with Reddit %@", (long)broken,
                                                       broken == 1 ? @"" : @"s", version]
@@ -1601,41 +1613,42 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
   UILabel *subline = [[UILabel alloc] init];
   subline.font = PDSettingsFont(12.0, NO);
   subline.textColor = PDSecondaryColor();
+  subline.textAlignment = NSTextAlignmentCenter;
   subline.numberOfLines = 0;
   subline.text = [NSString stringWithFormat:@"iOS %@ \u00b7 %@", UIDevice.currentDevice.systemVersion,
                                             PDCompatRecordingText()];
-  UIStackView *words = [[UIStackView alloc] initWithArrangedSubviews:@[ headline, subline ]];
-  words.axis = UILayoutConstraintAxisVertical;
-  words.spacing = 2.0;
-  UIStackView *top = [[UIStackView alloc] initWithArrangedSubviews:@[ disc, words ]];
-  top.alignment = UIStackViewAlignmentCenter;
-  top.spacing = 12.0;
 
   UIStackView *tiles = [[UIStackView alloc] initWithArrangedSubviews:@[
     PDReportCount(broken, @"Broken", broken ? UIColor.systemRedColor : PDSecondaryColor()),
-    PDReportCount(working, @"Working", working ? UIColor.systemGreenColor : PDSecondaryColor()),
+    PDReportCount(counts[PDCompatVerdictWorking], @"Working", UIColor.systemGreenColor),
     PDReportCount(counts[PDCompatVerdictNotSeen], @"Not seen", PDPrimaryColor()),
     PDReportCount(counts[PDCompatVerdictOff], @"Off", UIColor.tertiaryLabelColor),
   ]];
   tiles.distribution = UIStackViewDistributionFillEqually;
   tiles.spacing = 8.0;
 
-  UIStackView *all = [[UIStackView alloc] initWithArrangedSubviews:@[ top, tiles ]];
+  UIStackView *all = [[UIStackView alloc] initWithArrangedSubviews:@[ disc, headline, subline, tiles ]];
   all.axis = UILayoutConstraintAxisVertical;
-  all.spacing = 16.0;
+  all.alignment = UIStackViewAlignmentCenter;
+  [all setCustomSpacing:12.0 afterView:disc];
+  [all setCustomSpacing:2.0 afterView:headline];
+  [all setCustomSpacing:14.0 afterView:subline];
   all.translatesAutoresizingMaskIntoConstraints = NO;
   UIView *container = [[UIView alloc] init];
   container.backgroundColor = UIColor.systemBackgroundColor;
   [container addSubview:all];
   [NSLayoutConstraint activateConstraints:@[
-    [disc.widthAnchor constraintEqualToConstant:40.0],
-    [disc.heightAnchor constraintEqualToConstant:40.0],
+    [disc.widthAnchor constraintEqualToConstant:60.0],
+    [disc.heightAnchor constraintEqualToConstant:60.0],
     [mark.centerXAnchor constraintEqualToAnchor:disc.centerXAnchor],
     [mark.centerYAnchor constraintEqualToAnchor:disc.centerYAnchor],
-    [all.topAnchor constraintEqualToAnchor:container.topAnchor constant:12.0],
+    [headline.widthAnchor constraintEqualToAnchor:all.widthAnchor],
+    [subline.widthAnchor constraintEqualToAnchor:all.widthAnchor],
+    [tiles.widthAnchor constraintEqualToAnchor:all.widthAnchor],
+    [all.topAnchor constraintEqualToAnchor:container.topAnchor constant:16.0],
     [all.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:kPDPlainTextInset],
     [all.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-kPDPlainTextInset],
-    [all.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-4.0],
+    [all.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-12.0],
   ]];
   return container;
 }
@@ -1959,13 +1972,12 @@ static char kPDSectionsKey;
 // happen. Help names a row by its key and adds one sentence for the info sheet.
 static NSArray *PDBuildMainSections(void) {
   NSMutableArray *tools = [NSMutableArray
-      arrayWithObjects:PDToggleRow(@"FLEX explorer", nil, @[ @"rpl3/bug" ], kPrimeDitFlexExplorer, NO, NO),
-                       PDLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
-                                 @selector(pdOpenBackup)),
-                       nil];
+      arrayWithObject:PDLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
+                                @selector(pdOpenBackup))];
 #if PRIMEDIT_DEBUG
   [tools addObject:PDLinkRow(@"Compatibility", nil, nil, @[ @"rpl3/verified" ], @selector(pdOpenCompatibility))];
 #endif
+  [tools addObject:PDToggleRow(@"FLEX explorer", nil, @[ @"rpl3/bug" ], kPrimeDitFlexExplorer, NO, NO)];
   return @[
     @{
       @"title" : @"Feed",

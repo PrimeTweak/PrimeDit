@@ -684,17 +684,15 @@ static BOOL gPDCompatButtonReady;
 
 + (UIButton *)makeButtonInBounds:(CGRect)bounds {
   UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-  button.frame = CGRectMake(0, 0, 48.0, 48.0);
+  button.frame = CGRectMake(0, 0, 50.0, 50.0);
   button.center = CGPointMake(CGRectGetMaxX(bounds) - 44.0, CGRectGetMaxY(bounds) - 180.0);
-  button.backgroundColor = [UIColor.systemGreenColor colorWithAlphaComponent:0.92];
+  button.backgroundColor = [UIColor colorWithWhite:0.09 alpha:0.82];
   button.tintColor = UIColor.whiteColor;
-  button.layer.cornerRadius = 24.0;
-  button.layer.shadowColor = UIColor.blackColor.CGColor;
-  button.layer.shadowOpacity = 0.25f;
-  button.layer.shadowRadius = 6.0;
-  button.layer.shadowOffset = CGSizeMake(0, 2.0);
+  button.layer.cornerRadius = 25.0;
+  button.layer.borderWidth = 1.0;
+  button.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
   UIImageSymbolConfiguration *symbol =
-      [UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold];
+      [UIImageSymbolConfiguration configurationWithPointSize:19.0 weight:UIImageSymbolWeightSemibold];
   [button setImage:[UIImage systemImageNamed:@"stethoscope" withConfiguration:symbol] forState:UIControlStateNormal];
   button.accessibilityLabel = @"Compatibility report";
   [button addTarget:self action:@selector(showReport) forControlEvents:UIControlEventTouchUpInside];
