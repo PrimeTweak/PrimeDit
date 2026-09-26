@@ -26,8 +26,6 @@ static const CGFloat kPDTRowHeight = 48.0;
 static const CGFloat kPDTRowHeightWithSubtitle = 64.0;
 static const CGFloat kPDTHeaderHeight = 32.0;
 static const CGFloat kPDTSectionGap = 16.0;
-static const CGFloat kPDTLinkHeight = 44.0;
-static const CGFloat kPDTLinkCenterY = 17.0;
 static const CGFloat kPDTIconCenterX = 32.0;
 static const CGFloat kPDTIconBox = 24.0;
 static const CGFloat kPDTTextInset = 57.0;
@@ -407,8 +405,8 @@ static UIView *PDTCreditFooter(void) {
     return footer;
 }
 
-// The "How it works" link under the last section: its icon and title sit in the
-// row icon and title columns, in the footer's gray.
+// The "How it works" link under the last section, in the footer's gray, laid out
+// as one more row: its icon and title in the row icon and title columns.
 @interface PDTHowItWorksLink : UIControl
 - (instancetype)initWithTarget:(id)target action:(SEL)action;
 @end
@@ -425,7 +423,7 @@ static UIView *PDTCreditFooter(void) {
             [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"info.circle" withConfiguration:size]];
     icon.contentMode = UIViewContentModeCenter;
     icon.tintColor = gray;
-    icon.frame = CGRectMake(kPDTIconCenterX - kPDTIconBox / 2.0, kPDTLinkCenterY - kPDTIconBox / 2.0, kPDTIconBox,
+    icon.frame = CGRectMake(kPDTIconCenterX - kPDTIconBox / 2.0, (kPDTRowHeight - kPDTIconBox) / 2.0, kPDTIconBox,
                             kPDTIconBox);
     [self addSubview:icon];
 
@@ -434,7 +432,7 @@ static UIView *PDTCreditFooter(void) {
     title.font = PDTSettingsFont(15, NO);
     title.textColor = gray;
     CGSize fit = [title sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
-    title.frame = CGRectMake(kPDTTextInset, round(kPDTLinkCenterY - fit.height / 2.0), ceil(fit.width),
+    title.frame = CGRectMake(kPDTTextInset, round((kPDTRowHeight - fit.height) / 2.0), ceil(fit.width),
                              ceil(fit.height));
     [self addSubview:title];
 
@@ -2234,7 +2232,7 @@ static NSArray *PDTBuildMainSections(void) {
 }
 %new
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return section == (NSInteger)[self pdSections].count - 1 ? kPDTLinkHeight : kPDTSectionGap;
+    return section == (NSInteger)[self pdSections].count - 1 ? kPDTRowHeight : kPDTSectionGap;
 }
 %new
 - (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
