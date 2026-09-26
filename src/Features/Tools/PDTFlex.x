@@ -2,13 +2,13 @@
 // Reddit returns to the foreground.
 #import <UIKit/UIKit.h>
 #import "FLEXManager.h"
-#import "Preferences.h"
+#import "PDTPreferences.h"
 
-static char kPDFlexObserver;
+static char kPDTFlexObserver;
 static BOOL gPDFlexShown;
 
-static void PDApplyFlexExplorer(void) {
-    if (PDPrefBool(kPrimeDitFlexExplorer, NO)) {
+static void PDTApplyFlexExplorer(void) {
+    if (PDTPrefBool(kPrimeDitFlexExplorer, NO)) {
         [FLEXManager.sharedManager showExplorer];
         gPDFlexShown = YES;
     } else if (gPDFlexShown) {
@@ -17,23 +17,24 @@ static void PDApplyFlexExplorer(void) {
     }
 }
 
-static void PDFlexPrefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object,
-                               CFDictionaryRef userInfo) {
+static void PDTFlexPrefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object,
+                                CFDictionaryRef userInfo) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        PDApplyFlexExplorer();
+        PDTApplyFlexExplorer();
     });
 }
 
 %ctor {
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), &kPDFlexObserver, PDFlexPrefsChanged,
-                                    CFSTR(kPrimeDitPrefsNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), &kPDTFlexObserver,
+                                    PDTFlexPrefsChanged, CFSTR(kPrimeDitPrefsNotification), NULL,
+                                    CFNotificationSuspensionBehaviorCoalesce);
     [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification
                                                     object:nil
                                                      queue:NSOperationQueue.mainQueue
                                                 usingBlock:^(NSNotification *note) {
                                                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
                                                                    dispatch_get_main_queue(), ^{
-                                                                       PDApplyFlexExplorer();
+                                                                       PDTApplyFlexExplorer();
                                                                    });
                                                 }];
 }

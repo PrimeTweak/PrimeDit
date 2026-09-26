@@ -1,32 +1,32 @@
-#import "DataPaths.h"
+#import "PDTDataPaths.h"
 
 #if PRIMEDIT_DEBUG
 
-NSString *const kPDDataPathOperation = @"op";
-NSString *const kPDDataPathExpected = @"expected";
-NSString *const kPDDataPathHits = @"hits";
-NSString *const kPDDataPathMisses = @"misses";
-NSString *const kPDDataPathDiscovered = @"discovered";
-NSString *const kPDDataPathLastResolved = @"lastResolved";
-NSString *const kPDDataPathSeen = @"seen";
-NSString *const kPDDataPathFailedJSON = @"failedJSON";
+NSString *const kPDTDataPathOperation = @"op";
+NSString *const kPDTDataPathExpected = @"expected";
+NSString *const kPDTDataPathHits = @"hits";
+NSString *const kPDTDataPathMisses = @"misses";
+NSString *const kPDTDataPathDiscovered = @"discovered";
+NSString *const kPDTDataPathLastResolved = @"lastResolved";
+NSString *const kPDTDataPathSeen = @"seen";
+NSString *const kPDTDataPathFailedJSON = @"failedJSON";
 
 // Bounds that keep the search cheap even on a large response.
-static const NSInteger kPDMaxVisited = 6000; // total nodes inspected
-static const NSInteger kPDMaxDepth = 9;      // key-path depth
-static const NSUInteger kPDMaxArrayElements = 6; // array elements descended into
+static const NSInteger kPDTMaxVisited = 6000; // total nodes inspected
+static const NSInteger kPDTMaxDepth = 9;      // key-path depth
+static const NSUInteger kPDTMaxArrayElements = 6; // array elements descended into
 
-@implementation PDDataPathTracker {
+@implementation PDTDataPathTracker {
     dispatch_queue_t _queue;             // serializes all access to the stores
     NSMutableArray<NSString *> *_order;  // operation names, in display order
     NSMutableDictionary<NSString *, NSMutableDictionary *> *_records;
 }
 
 + (instancetype)shared {
-    static PDDataPathTracker *instance;
+    static PDTDataPathTracker *instance;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        instance = [[PDDataPathTracker alloc] init];
+        instance = [[PDTDataPathTracker alloc] init];
     });
     return instance;
 }
@@ -51,17 +51,17 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
 // Runs on _queue, or from init before the tracker is shared.
 - (void)seedOperation:(NSString *)op expected:(NSString *)expected {
     if (_records[op]) {
-        _records[op][kPDDataPathExpected] = expected;
+        _records[op][kPDTDataPathExpected] = expected;
         return;
     }
     [_order addObject:op];
     _records[op] = [@{
-        kPDDataPathOperation : op,
-        kPDDataPathExpected : expected,
-        kPDDataPathHits : @0,
-        kPDDataPathMisses : @0,
-        kPDDataPathLastResolved : @NO,
-        kPDDataPathSeen : @NO,
+        kPDTDataPathOperation : op,
+        kPDTDataPathExpected : expected,
+        kPDTDataPathHits : @0,
+        kPDTDataPathMisses : @0,
+        kPDTDataPathLastResolved : @NO,
+        kPDTDataPathSeen : @NO,
     } mutableCopy];
 }
 
@@ -69,7 +69,7 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
            expectedPath:(NSString *)expectedPath
                resolved:(BOOL)resolved
                    json:(id)json
-              shape:(PDDataShape)shape {
+              shape:(PDTDataShape)shape {
     if (operation.length == 0) return;
 
     __block BOOL needsDiscovery = NO;
@@ -77,15 +77,15 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
         NSMutableDictionary *record = _records[operation];
         if (record) {
             // Stats first, so the address no longer reads "not seen".
-            record[kPDDataPathSeen] = @YES;
-            record[kPDDataPathLastResolved] = @(resolved);
+            record[kPDTDataPathSeen] = @YES;
+            record[kPDTDataPathLastResolved] = @(resolved);
 
             if (resolved) {
-                record[kPDDataPathHits] = @([record[kPDDataPathHits] integerValue] + 1);
+                record[kPDTDataPathHits] = @([record[kPDTDataPathHits] integerValue] + 1);
             } else {
-                record[kPDDataPathMisses] = @([record[kPDDataPathMisses] integerValue] + 1);
+                record[kPDTDataPathMisses] = @([record[kPDTDataPathMisses] integerValue] + 1);
                 // A miss without a known new address triggers the search.
-                if (!record[kPDDataPathDiscovered]) {
+                if (!record[kPDTDataPathDiscovered]) {
                     needsDiscovery = YES;
                 }
             }
@@ -100,14 +100,14 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
     dispatch_sync(_queue, ^{
         NSMutableDictionary *record = _records[operation];
         // Re-check: another thread may have filled it in the meantime.
-        if (record && !record[kPDDataPathDiscovered]) {
+        if (record && !record[kPDTDataPathDiscovered]) {
             if (discovered.length) {
-                record[kPDDataPathDiscovered] = discovered;
+                record[kPDTDataPathDiscovered] = discovered;
             } else {
                 // Nothing found: the response is kept so it can be copied from the report.
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:json options:NSJSONWritingPrettyPrinted error:nil];
                 if (jsonData) {
-                    record[kPDDataPathFailedJSON] = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+                    record[kPDTDataPathFailedJSON] = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
                 }
             }
         }
@@ -131,12 +131,12 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
     dispatch_sync(_queue, ^{
         for (NSString *op in _order) {
             NSMutableDictionary *record = _records[op];
-            record[kPDDataPathHits] = @0;
-            record[kPDDataPathMisses] = @0;
-            record[kPDDataPathLastResolved] = @NO;
-            record[kPDDataPathSeen] = @NO;
-            [record removeObjectForKey:kPDDataPathDiscovered];
-            [record removeObjectForKey:kPDDataPathFailedJSON];
+            record[kPDTDataPathHits] = @0;
+            record[kPDTDataPathMisses] = @0;
+            record[kPDTDataPathLastResolved] = @NO;
+            record[kPDTDataPathSeen] = @NO;
+            [record removeObjectForKey:kPDTDataPathDiscovered];
+            [record removeObjectForKey:kPDTDataPathFailedJSON];
         }
     });
 }
@@ -144,10 +144,10 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
 #pragma mark - Discovery
 
 // Whether `value` has the given shape.
-+ (BOOL)value:(id)value matchesShape:(PDDataShape)shape {
++ (BOOL)value:(id)value matchesShape:(PDTDataShape)shape {
     switch (shape) {
-        case PDDataShapeEdges:
-        case PDDataShapeTrees: {
+        case PDTDataShapeEdges:
+        case PDTDataShapeTrees: {
             if (![value isKindOfClass:NSArray.class]) return NO;
             for (id element in (NSArray *)value) {
                 if (![element isKindOfClass:NSDictionary.class]) continue;
@@ -155,7 +155,7 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
             }
             return NO;
         }
-        case PDDataShapeNodeArray: {
+        case PDTDataShapeNodeArray: {
             if (![value isKindOfClass:NSArray.class]) return NO;
             for (id element in (NSArray *)value) {
                 if (![element isKindOfClass:NSDictionary.class]) continue;
@@ -163,7 +163,7 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
             }
             return NO;
         }
-        case PDDataShapeCommentsAds:
+        case PDTDataShapeCommentsAds:
             return [value isKindOfClass:NSArray.class];
     }
     return NO;
@@ -171,17 +171,17 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
 
 // The key a Reddit rename usually keeps (its parents change); matching it first
 // gives an address that can replace the old one as is.
-+ (NSString *)preferredKeyForShape:(PDDataShape)shape {
++ (NSString *)preferredKeyForShape:(PDTDataShape)shape {
     switch (shape) {
-        case PDDataShapeEdges:       return @"edges";
-        case PDDataShapeTrees:       return @"trees";
-        case PDDataShapeNodeArray:   return @"postsInfoByIds";
-        case PDDataShapeCommentsAds: return @"pdpCommentsAds";
+        case PDTDataShapeEdges:       return @"edges";
+        case PDTDataShapeTrees:       return @"trees";
+        case PDTDataShapeNodeArray:   return @"postsInfoByIds";
+        case PDTDataShapeCommentsAds: return @"pdpCommentsAds";
     }
     return nil;
 }
 
-+ (NSString *)discoverPathForShape:(PDDataShape)shape in:(id)json {
++ (NSString *)discoverPathForShape:(PDTDataShape)shape in:(id)json {
     if (![json isKindOfClass:NSDictionary.class] && ![json isKindOfClass:NSArray.class]) {
         return nil;
     }
@@ -219,14 +219,14 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
         id value = entry[1];
         NSString *path = entry[2];
 
-        if (++visited > kPDMaxVisited) break;
+        if (++visited > kPDTMaxVisited) break;
 
         // Skip the synthetic root entry; only test real (key, value) pairs.
         if (path.length && test([key isKindOfClass:NSString.class] ? key : @"", value)) {
             return path;
         }
 
-        if (path.length && [self depthOfPath:path] >= kPDMaxDepth) continue;
+        if (path.length && [self depthOfPath:path] >= kPDTMaxDepth) continue;
 
         if ([value isKindOfClass:NSDictionary.class]) {
             [(NSDictionary *)value enumerateKeysAndObjectsUsingBlock:^(id childKey, id childValue, BOOL *stop) {
@@ -238,7 +238,7 @@ static const NSUInteger kPDMaxArrayElements = 6; // array elements descended int
             }];
         } else if ([value isKindOfClass:NSArray.class]) {
             NSArray *array = (NSArray *)value;
-            NSUInteger limit = MIN(array.count, kPDMaxArrayElements);
+            NSUInteger limit = MIN(array.count, kPDTMaxArrayElements);
             for (NSUInteger i = 0; i < limit; i++) {
                 NSString *childPath = [NSString stringWithFormat:@"%@[%lu]", path, (unsigned long)i];
                 [queue addObject:@[ [NSNull null], array[i] ?: [NSNull null], childPath ]];

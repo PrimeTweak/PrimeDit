@@ -41,8 +41,8 @@ PRIME_DEBUG ?= 0
 
 $(TWEAK_NAME)_FILES = $(shell find src -name '*.x' -o -name '*.xm' -o -name '*.m' -o -name '*.mm' -o -name '*.c') \
                       $(FISHHOOK_DIR)/fishhook.c $(FLEXD_FILES)
-$(TWEAK_NAME)_CFLAGS = -fobjc-arc $(addprefix -I,$(wildcard include) $(shell find src -type d)) -Ivendor $(FLEXD_INCLUDES) \
-                       -DPD_FLEX_SOURCES=$(words $(FLEXD_FILES)) -DPRIMEDIT_DEBUG=$(PRIME_DEBUG) \
+$(TWEAK_NAME)_CFLAGS = -fobjc-arc $(addprefix -I,$(shell find src -type d)) -Ivendor $(FLEXD_INCLUDES) \
+                       -DPDT_FLEX_SOURCES=$(words $(FLEXD_FILES)) -DPRIMEDIT_DEBUG=$(PRIME_DEBUG) \
                        -Wno-module-import-in-extern-c -Wno-error \
                        -Wno-deprecated-declarations -Wno-strict-prototypes -Wno-unsupported-availability-guard \
                        -Wno-unused-function -Wno-nullability-completeness -Wno-unused-property-ivar

@@ -1,185 +1,57 @@
-#import <Comment.h>
-#import <Post.h>
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
 #import <objc/runtime.h>
 #import <CoreFoundation/CoreFoundation.h>
-#import "Preferences.h"
-#import "DataPaths.h"
-#import "Compatibility.h"
+#import "PDTPreferences.h"
+#import "PDTDataPaths.h"
+#import "PDTCompatibility.h"
+#import "PDTFilterPrefs.h"
+#import "PDTTabs.h"
 
-// Icons already looked up, and GraphQL operations that never carry feed content.
-static NSCache *imageCache;
+// GraphQL operations that never carry feed content.
 static NSSet<NSString *> *ignoredOperationsSet;
-
-typedef struct {
-    BOOL promoted;
-    BOOL recommended;
-    BOOL nsfw;
-    BOOL awards;
-    BOOL scores;
-    BOOL automod;
-    BOOL recommendationCarousels;
-    BOOL extraFeedCards;
-    BOOL aiBoxes;
-    BOOL spoilers;
-    BOOL hideVisitedPosts;
-    BOOL removedComments;
-    BOOL keywordsEnabled;
-    BOOL subredditsEnabled;
-    BOOL mutedUsers;
-} PrimeDitPrefs;
-
-// Filter options, reloaded on every settings change notification.
-static PrimeDitPrefs globalPrefs;
-
-static void loadPreferences() {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    globalPrefs.promoted = PDPrefBool(kPrimeDitPromoted, YES);
-    globalPrefs.recommended = [defaults boolForKey:kPrimeDitRecommended];
-    globalPrefs.nsfw = [defaults boolForKey:kPrimeDitNSFW];
-    globalPrefs.awards = [defaults boolForKey:kPrimeDitAwards];
-    globalPrefs.scores = [defaults boolForKey:kPrimeDitScores];
-    globalPrefs.automod = [defaults boolForKey:kPrimeDitAutoCollapseAutoMod];
-    globalPrefs.recommendationCarousels = [defaults boolForKey:kPrimeDitRecommendationCarousels];
-    globalPrefs.extraFeedCards = [defaults boolForKey:kPrimeDitExtraFeedCards];
-    globalPrefs.aiBoxes = [defaults boolForKey:kPrimeDitAIBoxes];
-    globalPrefs.spoilers = [defaults boolForKey:kPrimeDitSpoilers];
-    globalPrefs.hideVisitedPosts = [defaults boolForKey:kPrimeDitHideVisitedPosts];
-    globalPrefs.removedComments = [defaults boolForKey:kPrimeDitRemovedComments];
-    globalPrefs.keywordsEnabled = [defaults boolForKey:kPrimeDitKeywordsEnabled];
-    globalPrefs.subredditsEnabled = [defaults boolForKey:kPrimeDitSubredditsEnabled];
-    globalPrefs.mutedUsers = [defaults boolForKey:kPrimeDitMutedUsersEnabled];
-}
-
-static void prefsNotificationCallback(CFNotificationCenterRef center, void *observer, CFStringRef name,
-                                      const void *object, CFDictionaryRef userInfo) {
-    loadPreferences();
-}
-
-@interface CUICatalog : NSObject {
-    NSBundle *_bundle;
-}
-- (NSArray<NSString *> *)allImageNames;
-- (instancetype)initWithName:(NSString *)name fromBundle:(NSBundle *)bundle error:(NSError **)error;
-@end
-
-static NSMutableArray<NSBundle *> *assetBundles;
-// Reddit's icons share one catalog, tried first; it is also the bundle that provided the last icon.
-static NSBundle *gIconBundle;
-static NSMutableArray<CUICatalog *> *assetCatalogs;
-
-// Looks an icon up in Reddit's asset catalogs.
-static UIImage *PDFindIcon(NSString *iconName) {
-    // The icon bundle first: walking all of Reddit's bundles cost up to 90 ms per icon (measured).
-    NSBundle *preferred;
-    @synchronized(assetBundles) {
-        preferred = gIconBundle;
-    }
-    if (preferred) {
-        UIImage *image = [UIImage imageNamed:iconName inBundle:preferred compatibleWithTraitCollection:nil];
-        if (image) return image;
-    }
-    // Then every asset catalog through UIKit; scanning each catalog is the last resort.
-    for (NSBundle *bundle in assetBundles) {
-        if (bundle == preferred) continue;
-        UIImage *image = [UIImage imageNamed:iconName inBundle:bundle compatibleWithTraitCollection:nil];
-        if (image) {
-            @synchronized(assetBundles) {
-                gIconBundle = bundle;
-            }
-            return image;
-        }
-    }
-
-    // Catalog names may carry a three-character size suffix.
-    for (CUICatalog *catalog in assetCatalogs) {
-        for (NSString *imageName in [catalog allImageNames]) {
-            if ([imageName hasPrefix:iconName] &&
-                (imageName.length == iconName.length || imageName.length == iconName.length + 3)) {
-                // The catalog keeps its bundle in the private _bundle ivar.
-                Ivar bundleIvar = class_getInstanceVariable(object_getClass(catalog), "_bundle");
-                if (!bundleIvar) continue;
-                NSBundle *bundle = object_getIvar(catalog, bundleIvar);
-                if (!bundle) continue;
-                UIImage *image = [UIImage imageNamed:imageName
-                                            inBundle:bundle
-                       compatibleWithTraitCollection:nil];
-                if (image) return image;
-            }
-        }
-    }
-    return nil;
-}
-
-extern "C" UIImage *iconWithName(NSString *iconName) {
-    if (!iconName) return nil;
-    UIImage *cachedImage = [imageCache objectForKey:iconName];
-    if (cachedImage) return cachedImage;
-    UIImage *image = PDFindIcon(iconName);
-    if (image) [imageCache setObject:image forKey:iconName];
-    return image;
-}
-
-extern "C" void PDApplySplitTabBadges(id indicators);
-
-extern "C" Class CoreClass(NSString *name) {
-    Class cls = NSClassFromString(name);
-    NSArray *prefixes = @[
-        @"Reddit.",
-        @"RedditCore.",
-        @"RedditCoreModels.",
-        @"RedditCore_RedditCoreModels.",
-        @"RedditUI.",
-      ];
-    for (NSString *prefix in prefixes) {
-        if (cls) break;
-        cls = NSClassFromString([prefix stringByAppendingString:name]);
-    }
-    return cls;
-}
 
 // Feed-unit type matching (recommendation carousels, discovery/trending cards,
 // AI answer boxes), with type names as of Reddit 2026.38.
-static BOOL PDTypeNameContainsAny(NSString *typeName, NSArray<NSString *> *needles) {
+static BOOL PDTTypeNameContainsAny(NSString *typeName, NSArray<NSString *> *needles) {
     for (NSString *needle in needles)
         if ([typeName containsString:needle]) return YES;
     return NO;
 }
 
-static PDCompatOption PDFeedUnitDropReason(id nodeObj, PrimeDitPrefs prefs) {
-    if (![nodeObj isKindOfClass:NSDictionary.class]) return PDCompatOptionNone;
+static PDTCompatOption PDTFeedUnitDropReason(id nodeObj, PrimeDitPrefs prefs) {
+    if (![nodeObj isKindOfClass:NSDictionary.class]) return PDTCompatOptionNone;
     NSString *typeName = ((NSDictionary *)nodeObj)[@"__typename"];
-    if (![typeName isKindOfClass:NSString.class]) return PDCompatOptionNone;
+    if (![typeName isKindOfClass:NSString.class]) return PDTCompatOptionNone;
 
     if (prefs.recommendationCarousels &&
-            PDTypeNameContainsAny(typeName, @[ @"CommunityRecommendation", @"RecommendationCarousel",
+            PDTTypeNameContainsAny(typeName, @[ @"CommunityRecommendation", @"RecommendationCarousel",
                                                @"RelatedCommunit", @"CarouselCommunityRecommendations" ]))
-        return PDCompatCommunityRecs;
+        return PDTCompatCommunityRecs;
     if (prefs.extraFeedCards &&
-            PDTypeNameContainsAny(typeName, @[ @"RelatedPostsFeedUnit", @"SearchTrendingFeedUnit",
+            PDTTypeNameContainsAny(typeName, @[ @"RelatedPostsFeedUnit", @"SearchTrendingFeedUnit",
                                                @"PostCarouselDiscoveryElement", @"OnboardingEntrypointFeedUnit",
                                                @"CommunityInspirationPromptFeedUnit", @"ChatChannelsFeedUnit",
                                                @"AmaCarouselFeedUnit", @"FeaturedCommunitiesFeedUnit" ]))
-        return PDCompatSuggestionCards;
+        return PDTCompatSuggestionCards;
     if (prefs.aiBoxes &&
-            PDTypeNameContainsAny(typeName, @[ @"RelatedAnswersFeedUnit", @"AnswerClustersPDPComponent" ]))
-        return PDCompatAIAnswers;
-    return PDCompatOptionNone;
+            PDTTypeNameContainsAny(typeName, @[ @"RelatedAnswersFeedUnit", @"AnswerClustersPDPComponent" ]))
+        return PDTCompatAIAnswers;
+    return PDTCompatOptionNone;
 }
 
-static NSString *PDTrimmedLowercase(NSString *s) {
+static NSString *PDTTrimmedLowercase(NSString *s) {
     return [[s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
 }
 
 // Truthiness helpers: numbers use boolValue; strings are
 // trimmed and lower-cased, with a small set of falsey literals.
-static BOOL PDDictTruthy(id v) {
+static BOOL PDTDictTruthy(id v) {
     if (!v || v == NSNull.null) return NO;
     if ([v isKindOfClass:NSNumber.class]) return [(NSNumber *)v boolValue];
     if ([v isKindOfClass:NSString.class]) {
-        NSString *s = PDTrimmedLowercase(v);
+        NSString *s = PDTTrimmedLowercase(v);
         if (s.length == 0) return NO;
         if ([s isEqualToString:@"0"] || [s isEqualToString:@"false"] ||
                 [s isEqualToString:@"no"] || [s isEqualToString:@"null"]) return NO;
@@ -189,10 +61,10 @@ static BOOL PDDictTruthy(id v) {
 }
 
 // removedByCategory carries a reason string; only false/null/none/empty mean "not removed".
-static BOOL PDRemovalValueTruthy(id v) {
+static BOOL PDTRemovalValueTruthy(id v) {
     if ([v isKindOfClass:NSNumber.class]) return [(NSNumber *)v boolValue];
     if ([v isKindOfClass:NSString.class]) {
-        NSString *s = PDTrimmedLowercase(v);
+        NSString *s = PDTTrimmedLowercase(v);
         if (s.length == 0) return NO;
         if ([s isEqualToString:@"false"] || [s isEqualToString:@"null"] || [s isEqualToString:@"none"]) return NO;
         return YES;
@@ -200,9 +72,9 @@ static BOOL PDRemovalValueTruthy(id v) {
     return NO;
 }
 
-static NSString *PDNormalizedUsername(id v) {
+static NSString *PDTNormalizedUsername(id v) {
     if (![v isKindOfClass:NSString.class]) return nil;
-    NSString *s = PDTrimmedLowercase(v);
+    NSString *s = PDTTrimmedLowercase(v);
     if ([s hasPrefix:@"/"]) s = [s substringFromIndex:1];
     if ([s hasPrefix:@"@"]) s = [s substringFromIndex:1];
     if ([s hasPrefix:@"u/"]) s = [s substringFromIndex:2];
@@ -210,16 +82,16 @@ static NSString *PDNormalizedUsername(id v) {
     return s.length ? s : nil;
 }
 
-static NSString *PDNormalizedSubredditName(id v) {
+static NSString *PDTNormalizedSubredditName(id v) {
     if (![v isKindOfClass:NSString.class]) return nil;
-    NSString *s = PDTrimmedLowercase(v);
+    NSString *s = PDTTrimmedLowercase(v);
     if ([s hasPrefix:@"/"]) s = [s substringFromIndex:1];
     if ([s hasPrefix:@"r/"]) s = [s substringFromIndex:2];
     s = [s stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     return s.length ? s : nil;
 }
 
-static BOOL PDStringMatchesKeyword(id v) {
+static BOOL PDTStringMatchesKeyword(id v) {
     if (![v isKindOfClass:NSString.class] || [(NSString *)v length] == 0) return NO;
     NSArray *words = [NSUserDefaults.standardUserDefaults arrayForKey:kPrimeDitKeywords];
     if (![words isKindOfClass:NSArray.class]) return NO;
@@ -231,21 +103,21 @@ static BOOL PDStringMatchesKeyword(id v) {
     return NO;
 }
 
-static BOOL PDValueMatchesKeyword(id v, int depth) {
+static BOOL PDTValueMatchesKeyword(id v, int depth) {
     if (depth > 6 || v == nil) return NO;
-    if ([v isKindOfClass:NSString.class]) return PDStringMatchesKeyword(v);
+    if ([v isKindOfClass:NSString.class]) return PDTStringMatchesKeyword(v);
     if ([v isKindOfClass:NSArray.class]) {
-        for (id e in (NSArray *)v) if (PDValueMatchesKeyword(e, depth + 1)) return YES;
+        for (id e in (NSArray *)v) if (PDTValueMatchesKeyword(e, depth + 1)) return YES;
         return NO;
     }
     if ([v isKindOfClass:NSDictionary.class]) {
-        for (id e in ((NSDictionary *)v).allValues) if (PDValueMatchesKeyword(e, depth + 1)) return YES;
+        for (id e in ((NSDictionary *)v).allValues) if (PDTValueMatchesKeyword(e, depth + 1)) return YES;
         return NO;
     }
     return NO;
 }
 
-static BOOL PDKeywordNodeShouldDrop(NSDictionary *node) {
+static BOOL PDTKeywordNodeShouldDrop(NSDictionary *node) {
     NSString *t = node[@"__typename"];
     if (![t isKindOfClass:NSString.class]) return NO;
     BOOL isPost = [t hasSuffix:@"Post"] || [t isEqualToString:@"PostInfo"];
@@ -255,131 +127,131 @@ static BOOL PDKeywordNodeShouldDrop(NSDictionary *node) {
                          @"selftext", @"selfText", @"domain", @"markdown", @"richtext",
                          @"displayName", @"name", @"prefixedName" ];
     for (NSString *k in fields)
-        if (PDValueMatchesKeyword(node[k], 0)) return YES;
+        if (PDTValueMatchesKeyword(node[k], 0)) return YES;
     return NO;
 }
 
-static BOOL PDSubredditNameIsBlocked(id name) {
-    NSString *n = PDNormalizedSubredditName(name);
+static BOOL PDTSubredditNameIsBlocked(id name) {
+    NSString *n = PDTNormalizedSubredditName(name);
     if (!n) return NO;
     NSArray *list = [NSUserDefaults.standardUserDefaults arrayForKey:kPrimeDitSubreddits];
     if (![list isKindOfClass:NSArray.class]) return NO;
     for (id e in list) {
-        NSString *b = PDNormalizedSubredditName(e);
+        NSString *b = PDTNormalizedSubredditName(e);
         if (b && [n isEqualToString:b]) return YES;
     }
     return NO;
 }
 
-static BOOL PDNodeMatchesBlockedSubreddit(NSDictionary *node) {
-    if (PDSubredditNameIsBlocked(node[@"prefixedName"])) return YES;
+static BOOL PDTNodeMatchesBlockedSubreddit(NSDictionary *node) {
+    if (PDTSubredditNameIsBlocked(node[@"prefixedName"])) return YES;
     id sr = node[@"subreddit"];
     if ([sr isKindOfClass:NSDictionary.class]) {
-        if (PDSubredditNameIsBlocked(((NSDictionary *)sr)[@"name"])) return YES;
-        if (PDSubredditNameIsBlocked(((NSDictionary *)sr)[@"prefixedName"])) return YES;
+        if (PDTSubredditNameIsBlocked(((NSDictionary *)sr)[@"name"])) return YES;
+        if (PDTSubredditNameIsBlocked(((NSDictionary *)sr)[@"prefixedName"])) return YES;
     }
     return NO;
 }
 
-static BOOL PDUsernameIsMuted(id name) {
-    NSString *n = PDNormalizedUsername(name);
+static BOOL PDTUsernameIsMuted(id name) {
+    NSString *n = PDTNormalizedUsername(name);
     if (!n) return NO;
     NSArray *list = [NSUserDefaults.standardUserDefaults arrayForKey:kPrimeDitMutedUsers];
     if (![list isKindOfClass:NSArray.class]) return NO;
     for (id e in list) {
-        NSString *m = PDNormalizedUsername(e);
+        NSString *m = PDTNormalizedUsername(e);
         if (m && [n isEqualToString:m]) return YES;
     }
     return NO;
 }
 
-static BOOL PDJSONNodeAuthorIsMuted(NSDictionary *node) {
+static BOOL PDTJSONNodeAuthorIsMuted(NSDictionary *node) {
     NSString *t = node[@"__typename"];
     if (![t isKindOfClass:NSString.class]) return NO;
     if (!([t hasSuffix:@"Post"] || [t hasSuffix:@"Comment"] || [t isEqualToString:@"CommentInfo"])) return NO;
     id ai = node[@"authorInfo"];
     if ([ai isKindOfClass:NSDictionary.class]) {
-        if (PDUsernameIsMuted(((NSDictionary *)ai)[@"displayName"])) return YES;
-        if (PDUsernameIsMuted(((NSDictionary *)ai)[@"prefixedName"])) return YES;
+        if (PDTUsernameIsMuted(((NSDictionary *)ai)[@"displayName"])) return YES;
+        if (PDTUsernameIsMuted(((NSDictionary *)ai)[@"prefixedName"])) return YES;
     }
     return NO;
 }
 
-static BOOL PDJSONNodeIsNSFW(NSDictionary *node) {
+static BOOL PDTJSONNodeIsNSFW(NSDictionary *node) {
     static NSString *const keys[] = { @"isNsfw", @"over18", @"over_18", @"isAdultContent", @"isNSFW" };
     for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
-        if (PDDictTruthy(node[keys[i]])) return YES;
+        if (PDTDictTruthy(node[keys[i]])) return YES;
     return NO;
 }
 
-// Option that removes one JSON object, or PDCompatOptionNone (Reddit 2026.38); visited
+// Option that removes one JSON object, or PDTCompatOptionNone (Reddit 2026.38); visited
 // posts only apply to Home feed requests.
-static PDCompatOption PDDropReasonForNode(NSDictionary *node, PrimeDitPrefs prefs, BOOL homeFeed) {
+static PDTCompatOption PDTDropReasonForNode(NSDictionary *node, PrimeDitPrefs prefs, BOOL homeFeed) {
     NSString *t = node[@"__typename"];
     if (![t isKindOfClass:NSString.class]) t = @"";
 
     if (prefs.promoted) {
-        if ([t containsString:@"AdPost"] || [t containsString:@"ConversationAd"]) return PDCompatPromoted;
-        if (PDDictTruthy(node[@"isAdPost"]) || PDDictTruthy(node[@"isCommercial"]) ||
-                PDDictTruthy(node[@"isPromoted"]) || PDDictTruthy(node[@"isCreatedFromAdsUi"]))
-            return PDCompatPromoted;
+        if ([t containsString:@"AdPost"] || [t containsString:@"ConversationAd"]) return PDTCompatPromoted;
+        if (PDTDictTruthy(node[@"isAdPost"]) || PDTDictTruthy(node[@"isCommercial"]) ||
+                PDTDictTruthy(node[@"isPromoted"]) || PDTDictTruthy(node[@"isCreatedFromAdsUi"]))
+            return PDTCompatPromoted;
         if ([node[@"adPayload"] isKindOfClass:NSDictionary.class] ||
                 [node[@"promotedCommunityPost"] isKindOfClass:NSDictionary.class] ||
                 [node[@"promotedUserPost"] isKindOfClass:NSDictionary.class])
-            return PDCompatPromoted;
+            return PDTCompatPromoted;
     }
-    if (prefs.nsfw && PDJSONNodeIsNSFW(node)) return PDCompatNSFW;
-    PDCompatOption unit = PDFeedUnitDropReason(node, prefs);
-    if (unit != PDCompatOptionNone) return unit;
-    if (prefs.spoilers && PDDictTruthy(node[@"isSpoiler"])) return PDCompatSpoilers;
+    if (prefs.nsfw && PDTJSONNodeIsNSFW(node)) return PDTCompatNSFW;
+    PDTCompatOption unit = PDTFeedUnitDropReason(node, prefs);
+    if (unit != PDTCompatOptionNone) return unit;
+    if (prefs.spoilers && PDTDictTruthy(node[@"isSpoiler"])) return PDTCompatSpoilers;
 
     if (homeFeed && prefs.hideVisitedPosts &&
             ([t isEqualToString:@"SubredditPost"] || [t isEqualToString:@"ProfilePost"]) &&
-            PDDictTruthy(node[@"isVisited"]))
-        return PDCompatVisitedPosts;
+            PDTDictTruthy(node[@"isVisited"]))
+        return PDTCompatVisitedPosts;
 
     if (prefs.removedComments && ([t hasSuffix:@"Comment"] || [t isEqualToString:@"CommentInfo"])) {
         if ([t isEqualToString:@"DeletedComment"] ||
-                PDDictTruthy(node[@"isRemoved"]) || PDDictTruthy(node[@"isDeleted"]) ||
-                PDDictTruthy(node[@"isAdminTakedown"]) || PDRemovalValueTruthy(node[@"removedByCategory"]))
-            return PDCompatRemovedComments;
+                PDTDictTruthy(node[@"isRemoved"]) || PDTDictTruthy(node[@"isDeleted"]) ||
+                PDTDictTruthy(node[@"isAdminTakedown"]) || PDTRemovalValueTruthy(node[@"removedByCategory"]))
+            return PDTCompatRemovedComments;
     }
 
-    if (prefs.keywordsEnabled && PDKeywordNodeShouldDrop(node)) return PDCompatKeywords;
-    if (prefs.subredditsEnabled && PDNodeMatchesBlockedSubreddit(node)) return PDCompatSubreddits;
-    if (prefs.mutedUsers && PDJSONNodeAuthorIsMuted(node)) return PDCompatMutedUsers;
-    return PDCompatOptionNone;
+    if (prefs.keywordsEnabled && PDTKeywordNodeShouldDrop(node)) return PDTCompatKeywords;
+    if (prefs.subredditsEnabled && PDTNodeMatchesBlockedSubreddit(node)) return PDTCompatSubreddits;
+    if (prefs.mutedUsers && PDTJSONNodeAuthorIsMuted(node)) return PDTCompatMutedUsers;
+    return PDTCompatOptionNone;
 }
 
 // A filtered post or comment nested under one of these keys removes its container.
-static NSString *const kPDPropagationKeys[] = { @"node", @"comment", @"post", @"postInfo", @"commentInfo" };
-static NSString *const kPDAdArrayKeys[] = { @"commentsPageAds", @"commentTreeAds", @"pdpCommentsAds",
+static NSString *const kPDTPropagationKeys[] = { @"node", @"comment", @"post", @"postInfo", @"commentInfo" };
+static NSString *const kPDTAdArrayKeys[] = { @"commentsPageAds", @"commentTreeAds", @"pdpCommentsAds",
                                             @"PdpCommentsAds", @"blankAdPosts" };
 
-static PDCompatOption PDSubtreeDropReason(id obj, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
-    if (depth > 3 || ![obj isKindOfClass:NSDictionary.class]) return PDCompatOptionNone;
+static PDTCompatOption PDTSubtreeDropReason(id obj, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
+    if (depth > 3 || ![obj isKindOfClass:NSDictionary.class]) return PDTCompatOptionNone;
     NSDictionary *dict = obj;
-    PDCompatOption reason = PDDropReasonForNode(dict, prefs, homeFeed);
-    size_t count = sizeof(kPDPropagationKeys) / sizeof(kPDPropagationKeys[0]);
-    for (size_t i = 0; reason == PDCompatOptionNone && i < count; i++)
-        reason = PDSubtreeDropReason(dict[kPDPropagationKeys[i]], prefs, homeFeed, depth + 1);
+    PDTCompatOption reason = PDTDropReasonForNode(dict, prefs, homeFeed);
+    size_t count = sizeof(kPDTPropagationKeys) / sizeof(kPDTPropagationKeys[0]);
+    for (size_t i = 0; reason == PDTCompatOptionNone && i < count; i++)
+        reason = PDTSubtreeDropReason(dict[kPDTPropagationKeys[i]], prefs, homeFeed, depth + 1);
     return reason;
 }
 
-static NSString *PDNormalizedCommentID(id v) {
+static NSString *PDTNormalizedCommentID(id v) {
     if (![v isKindOfClass:NSString.class]) return nil;
     NSString *s = [(NSString *)v lowercaseString];
     if ([s hasPrefix:@"t1_"]) s = [s substringFromIndex:3];
     return s.length ? s : nil;
 }
 
-static BOOL PDAnyDropEnabled(PrimeDitPrefs prefs) {
+static BOOL PDTAnyDropEnabled(PrimeDitPrefs prefs) {
     return prefs.promoted || prefs.nsfw || prefs.recommendationCarousels || prefs.extraFeedCards ||
            prefs.aiBoxes || prefs.spoilers || prefs.hideVisitedPosts || prefs.removedComments ||
            prefs.keywordsEnabled || prefs.subredditsEnabled || prefs.mutedUsers;
 }
 
-static BOOL PDIsHomeFeedRequest(NSString *operationName, NSString *body) {
+static BOOL PDTIsHomeFeedRequest(NSString *operationName, NSString *body) {
     static NSString *const names[] = { @"HomeFeedElements", @"HomeFeedSdui", @"HomeFeedSduiQuery",
                                        @"HomeFeedSduiBgQuery", @"HomeFeedWithDefer",
                                        @"HomeFeedWithDeferQuery", @"ios_home_feed_defer_query" };
@@ -392,7 +264,7 @@ static BOOL PDIsHomeFeedRequest(NSString *operationName, NSString *body) {
 
 #if PRIMEDIT_DEBUG
 // Compatibility check: type name of a list item, looking through its "node" wrapper.
-static NSString *PDCompatItemType(NSDictionary *item) {
+static NSString *PDTCompatItemType(NSDictionary *item) {
     id node = item[@"node"];
     NSDictionary *inner = [node isKindOfClass:NSDictionary.class] ? node : item;
     NSString *type = inner[@"__typename"];
@@ -403,20 +275,20 @@ static NSString *PDCompatItemType(NSDictionary *item) {
 // Recursive walk over the whole response: filtered array
 // elements are removed in place (containers are mutable), ad arrays emptied,
 // and direct replies to muted users' comments dropped with them.
-static void PDWalkJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
+static void PDTWalkJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
     if (depth > 48) return;
 
     if ([value isKindOfClass:NSMutableDictionary.class]) {
         NSMutableDictionary *dict = value;
         if (prefs.promoted) {
-            for (size_t i = 0; i < sizeof(kPDAdArrayKeys) / sizeof(kPDAdArrayKeys[0]); i++) {
-                NSArray *ads = dict[kPDAdArrayKeys[i]];
+            for (size_t i = 0; i < sizeof(kPDTAdArrayKeys) / sizeof(kPDTAdArrayKeys[0]); i++) {
+                NSArray *ads = dict[kPDTAdArrayKeys[i]];
                 if (![ads isKindOfClass:NSArray.class]) continue;
-                PDCOMPAT_ACTION_IF(ads.count, PDCompatPromoted, @"%@ cleared", kPDAdArrayKeys[i]);
-                dict[kPDAdArrayKeys[i]] = [NSMutableArray array];
+                PDTCOMPAT_ACTION_IF(ads.count, PDTCompatPromoted, @"%@ cleared", kPDTAdArrayKeys[i]);
+                dict[kPDTAdArrayKeys[i]] = [NSMutableArray array];
             }
         }
-        for (id child in dict.allValues) PDWalkJSON(child, prefs, homeFeed, depth + 1);
+        for (id child in dict.allValues) PDTWalkJSON(child, prefs, homeFeed, depth + 1);
         return;
     }
     if (![value isKindOfClass:NSMutableArray.class]) return;
@@ -428,8 +300,8 @@ static void PDWalkJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) 
             if (![el isKindOfClass:NSDictionary.class]) continue;
             id node = ((NSDictionary *)el)[@"node"];
             NSDictionary *comment = [node isKindOfClass:NSDictionary.class] ? node : el;
-            if (!PDJSONNodeAuthorIsMuted(comment)) continue;
-            NSString *cid = PDNormalizedCommentID(comment[@"id"]);
+            if (!PDTJSONNodeAuthorIsMuted(comment)) continue;
+            NSString *cid = PDTNormalizedCommentID(comment[@"id"]);
             if (!cid) continue;
             if (!mutedIDs) mutedIDs = [NSMutableSet set];
             [mutedIDs addObject:cid];
@@ -438,25 +310,25 @@ static void PDWalkJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) 
 
     [array filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id el, NSDictionary *bindings) {
         if (![el isKindOfClass:NSDictionary.class]) return YES;
-        PDCompatOption reason = PDSubtreeDropReason(el, prefs, homeFeed, 0);
-        if (reason != PDCompatOptionNone) {
-            PDCOMPAT_ACTION(reason, @"%@", PDCompatItemType(el));
+        PDTCompatOption reason = PDTSubtreeDropReason(el, prefs, homeFeed, 0);
+        if (reason != PDTCompatOptionNone) {
+            PDTCOMPAT_ACTION(reason, @"%@", PDTCompatItemType(el));
             return NO;
         }
         if (mutedIDs.count) {
             NSDictionary *entry = el;
             id node = entry[@"node"];
             NSDictionary *comment = [node isKindOfClass:NSDictionary.class] ? node : entry;
-            NSString *parent = PDNormalizedCommentID(entry[@"parentId"]) ?: PDNormalizedCommentID(comment[@"parentId"]);
+            NSString *parent = PDTNormalizedCommentID(entry[@"parentId"]) ?: PDTNormalizedCommentID(comment[@"parentId"]);
             if (parent && [mutedIDs containsObject:parent]) {
-                PDCOMPAT_ACTION(PDCompatMutedUsers, @"Reply to a muted user");
+                PDTCOMPAT_ACTION(PDTCompatMutedUsers, @"Reply to a muted user");
                 return NO;
             }
         }
         return YES;
     }]];
 
-    for (id child in array) PDWalkJSON(child, prefs, homeFeed, depth + 1);
+    for (id child in array) PDTWalkJSON(child, prefs, homeFeed, depth + 1);
 }
 
 static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
@@ -470,11 +342,11 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
         if (prefs.awards) {
             node[@"awardings"] = @[];
             node[@"isGildable"] = @NO;
-            PDCOMPAT_ACTION(PDCompatAwards, @"%@", typeName);
+            PDTCOMPAT_ACTION(PDTCompatAwards, @"%@", typeName);
         }
         if (prefs.scores) {
             node[@"isScoreHidden"] = @YES;
-            PDCOMPAT_ACTION(PDCompatVoteCounts, @"%@", typeName);
+            PDTCOMPAT_ACTION(PDTCompatVoteCounts, @"%@", typeName);
         }
         if (prefs.nsfw && [node[@"isNsfw"] boolValue]) node[@"isHidden"] = @YES;
     }
@@ -482,11 +354,11 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
         if (prefs.awards) {
             node[@"awardings"] = @[];
             node[@"isGildable"] = @NO;
-            PDCOMPAT_ACTION(PDCompatAwards, @"%@", typeName);
+            PDTCOMPAT_ACTION(PDTCompatAwards, @"%@", typeName);
         }
         if (prefs.scores) {
             node[@"isScoreHidden"] = @YES;
-            PDCOMPAT_ACTION(PDCompatVoteCounts, @"%@", typeName);
+            PDTCOMPAT_ACTION(PDTCompatVoteCounts, @"%@", typeName);
         }
         if (prefs.automod) {
             NSDictionary *authorInfo = node[@"authorInfo"];
@@ -494,7 +366,7 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
                 id authorId = authorInfo[@"id"];
                 if ([authorId isKindOfClass:NSString.class] && [authorId isEqualToString:@"t2_6l4z3"]) {
                     node[@"isInitiallyCollapsed"] = @YES;
-                    PDCOMPAT_ACTION(PDCompatAutoMod, @"AutoMod comment collapsed");
+                    PDTCOMPAT_ACTION(PDTCompatAutoMod, @"AutoMod comment collapsed");
                 }
             }
         }
@@ -516,8 +388,8 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
                                      [typeIdentifier hasPrefix:@"global_popular"];
                 if (!isPopularFeed) {
                     node[@"cells"] = @[];
-                    PDCOMPAT_ACTION(PDCompatRecommended, @"%@ hidden=%@", recTypeName,
-                                    recContext[@"isContextHidden"] ?: @"none");
+                    PDTCOMPAT_ACTION(PDTCompatRecommended, @"%@ hidden=%@", recTypeName,
+                                     recContext[@"isContextHidden"] ?: @"none");
                     return;
                 }
             }
@@ -532,7 +404,7 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
                     if ([cell[@"__typename"] isEqualToString:@"ActionCell"]) {
                         if (prefs.awards) {
                             cell[@"isAwardHidden"] = @YES;
-                            PDCOMPAT_ACTION(PDCompatAwards, @"ActionCell");
+                            PDTCOMPAT_ACTION(PDTCompatAwards, @"ActionCell");
                             id goldenInfo = cell[@"goldenUpvoteInfo"];
                             if ([goldenInfo isKindOfClass:NSMutableDictionary.class]) {
                                 ((NSMutableDictionary *)goldenInfo)[@"isGildable"] = @NO;
@@ -540,7 +412,7 @@ static void filterNode(NSMutableDictionary *node, PrimeDitPrefs prefs) {
                         }
                         if (prefs.scores) {
                             cell[@"isScoreHidden"] = @YES;
-                            PDCOMPAT_ACTION(PDCompatVoteCounts, @"ActionCell");
+                            PDTCOMPAT_ACTION(PDTCompatVoteCounts, @"ActionCell");
                         }
                     }
                 }
@@ -595,7 +467,7 @@ static void filterGenericResponse(NSMutableDictionary *json, PrimeDitPrefs prefs
 
         if (rootDict[@"recommendations"] && prefs.recommended) {
             rootDict[@"recommendations"] = @[];
-            PDCOMPAT_ACTION(PDCompatRecommended, @"Recommendations list cleared");
+            PDTCOMPAT_ACTION(PDTCompatRecommended, @"Recommendations list cleared");
         }
 
     } else if ([root isKindOfClass:NSArray.class]) {
@@ -608,58 +480,58 @@ static void filterGenericResponse(NSMutableDictionary *json, PrimeDitPrefs prefs
 // Compatibility check, on what reaches the app: posts and comments carrying the fields
 // each filter reads, list items a filter should have removed, and feed unit
 // types no filter knows.
-static void PDCompatInspectNode(NSDictionary *node, NSString *type, BOOL homeFeed) {
+static void PDTCompatInspectNode(NSDictionary *node, NSString *type, BOOL homeFeed) {
     if ([type hasSuffix:@"FeedUnit"]) {
         PrimeDitPrefs all = {0};
         all.recommendationCarousels = YES;
         all.extraFeedCards = YES;
         all.aiBoxes = YES;
-        PDCompatRecordFeedUnit(type, PDFeedUnitDropReason(node, all) != PDCompatOptionNone);
+        PDTCompatRecordFeedUnit(type, PDTFeedUnitDropReason(node, all) != PDTCompatOptionNone);
         return;
     }
     BOOL isPost = [type isEqualToString:@"SubredditPost"] || [type isEqualToString:@"ProfilePost"];
     BOOL isComment = [type isEqualToString:@"Comment"];
     if (!isPost && !isComment) return;
     NSDictionary *author = [node[@"authorInfo"] isKindOfClass:NSDictionary.class] ? node[@"authorInfo"] : nil;
-    PDCompatRecordSentinel(PDCompatMutedUsers, author[@"displayName"] != nil || author[@"prefixedName"] != nil);
+    PDTCompatRecordSentinel(PDTCompatMutedUsers, author[@"displayName"] != nil || author[@"prefixedName"] != nil);
     if (isComment) {
-        PDCompatRecordSentinel(PDCompatAutoMod, author[@"id"] != nil);
+        PDTCompatRecordSentinel(PDTCompatAutoMod, author[@"id"] != nil);
         return;
     }
-    PDCompatRecordSentinel(PDCompatNSFW, node[@"isNsfw"] != nil || node[@"over18"] != nil || node[@"over_18"] != nil ||
+    PDTCompatRecordSentinel(PDTCompatNSFW, node[@"isNsfw"] != nil || node[@"over18"] != nil || node[@"over_18"] != nil ||
                                      node[@"isAdultContent"] != nil || node[@"isNSFW"] != nil);
-    PDCompatRecordSentinel(PDCompatSpoilers, node[@"isSpoiler"] != nil);
+    PDTCompatRecordSentinel(PDTCompatSpoilers, node[@"isSpoiler"] != nil);
     NSDictionary *subreddit = [node[@"subreddit"] isKindOfClass:NSDictionary.class] ? node[@"subreddit"] : nil;
-    PDCompatRecordSentinel(PDCompatSubreddits, node[@"prefixedName"] != nil || subreddit[@"name"] != nil ||
+    PDTCompatRecordSentinel(PDTCompatSubreddits, node[@"prefixedName"] != nil || subreddit[@"name"] != nil ||
                                            subreddit[@"prefixedName"] != nil);
-    if (homeFeed) PDCompatRecordSentinel(PDCompatVisitedPosts, node[@"isVisited"] != nil);
+    if (homeFeed) PDTCompatRecordSentinel(PDTCompatVisitedPosts, node[@"isVisited"] != nil);
 }
 
-static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
+static void PDTCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, int depth) {
     if (depth > 48) return;
     if ([value isKindOfClass:NSArray.class]) {
         for (id child in (NSArray *)value) {
             if ([child isKindOfClass:NSDictionary.class]) {
-                PDCompatOption missed = PDSubtreeDropReason(child, prefs, homeFeed, 0);
-                if (missed != PDCompatOptionNone) PDCompatRecordAnomaly(missed, @"An item it should remove reached the app");
+                PDTCompatOption missed = PDTSubtreeDropReason(child, prefs, homeFeed, 0);
+                if (missed != PDTCompatOptionNone) PDTCompatRecordAnomaly(missed, @"An item it should remove reached the app");
             }
-            PDCompatInspectJSON(child, prefs, homeFeed, depth + 1);
+            PDTCompatInspectJSON(child, prefs, homeFeed, depth + 1);
         }
         return;
     }
     if (![value isKindOfClass:NSDictionary.class]) return;
     NSDictionary *node = value;
     NSString *type = node[@"__typename"];
-    if ([type isKindOfClass:NSString.class]) PDCompatInspectNode(node, type, homeFeed);
-    for (id child in node.allValues) PDCompatInspectJSON(child, prefs, homeFeed, depth + 1);
+    if ([type isKindOfClass:NSString.class]) PDTCompatInspectNode(node, type, homeFeed);
+    for (id child in node.allValues) PDTCompatInspectJSON(child, prefs, homeFeed, depth + 1);
 }
 
-#define PDCOMPAT_INSPECT(json, prefs, homeFeed)                          \
+#define PDTCOMPAT_INSPECT(json, prefs, homeFeed)                          \
   do {                                                               \
-    if (PDCompatActive) PDCompatInspectJSON((json), (prefs), (homeFeed), 0); \
+    if (PDTCompatActive) PDTCompatInspectJSON((json), (prefs), (homeFeed), 0); \
   } while (0)
 #else
-#define PDCOMPAT_INSPECT(json, prefs, homeFeed) \
+#define PDTCOMPAT_INSPECT(json, prefs, homeFeed) \
   do {                                      \
   } while (0)
 #endif
@@ -727,17 +599,17 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
 
                 NSMutableDictionary *json = (NSMutableDictionary *)jsonObject;
                 if ([operationName isEqualToString:@"BadgeCountsV2"])
-                        PDApplySplitTabBadges([json valueForKeyPath:@"data.badgeIndicators"]);
+                        PDTApplySplitTabBadges([json valueForKeyPath:@"data.badgeIndicators"]);
 
                 PrimeDitPrefs prefs = globalPrefs;
-                BOOL homeFeed = PDIsHomeFeedRequest(operationName, bodyString);
-                PDCOMPAT_RESPONSE(operationName);
+                BOOL homeFeed = PDTIsHomeFeedRequest(operationName, bodyString);
+                PDTCOMPAT_RESPONSE(operationName);
 
                 // Fast path based on known schemas.
                 if ([operationName isEqualToString:@"HomeFeedSdui"]) {
                     id edges = [json valueForKeyPath:@"data.homeV3.elements.edges"];
                     BOOL resolved = [edges isKindOfClass:NSArray.class];
-                    PD_RECORD_DATA_PATH(@"HomeFeedSdui", @"data.homeV3.elements.edges", resolved, json, PDDataShapeEdges);
+                    PDT_RECORD_DATA_PATH(@"HomeFeedSdui", @"data.homeV3.elements.edges", resolved, json, PDTDataShapeEdges);
 
                     if (resolved) {
                         for (NSMutableDictionary *edge in (NSArray *)edges)
@@ -748,7 +620,8 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
                 } else if ([operationName isEqualToString:@"PopularFeedSdui"]) {
                     id edges = [json valueForKeyPath:@"data.popularV3.elements.edges"];
                     BOOL resolved = [edges isKindOfClass:NSArray.class];
-                    PD_RECORD_DATA_PATH(@"PopularFeedSdui", @"data.popularV3.elements.edges", resolved, json, PDDataShapeEdges);
+                    PDT_RECORD_DATA_PATH(@"PopularFeedSdui", @"data.popularV3.elements.edges", resolved, json,
+                                         PDTDataShapeEdges);
 
                     if (resolved) {
                         for (NSMutableDictionary *edge in (NSArray *)edges)
@@ -759,7 +632,8 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
                 } else if ([operationName isEqualToString:@"FeedPostDetailsByIds"]) {
                     id nodes = [json valueForKeyPath:@"data.postsInfoByIds"];
                     BOOL resolved = [nodes isKindOfClass:NSArray.class];
-                    PD_RECORD_DATA_PATH(@"FeedPostDetailsByIds", @"data.postsInfoByIds", resolved, json, PDDataShapeNodeArray);
+                    PDT_RECORD_DATA_PATH(@"FeedPostDetailsByIds", @"data.postsInfoByIds", resolved, json,
+                                         PDTDataShapeNodeArray);
 
                     if (resolved) {
                         for (NSMutableDictionary *node in (NSArray *)nodes)
@@ -774,8 +648,8 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
                     // A post without comments has no commentForest; that still counts as resolved.
                     BOOL resolved = [trees isKindOfClass:NSArray.class] ||
                                     ([postInfo isKindOfClass:NSDictionary.class] && postInfo[@"commentForest"] == nil);
-                    PD_RECORD_DATA_PATH(@"PostInfoById", @"data.postInfoById.commentForest.trees", resolved, json,
-                                        PDDataShapeTrees);
+                    PDT_RECORD_DATA_PATH(@"PostInfoById", @"data.postInfoById.commentForest.trees", resolved, json,
+                                         PDTDataShapeTrees);
 
                     if (resolved) {
                         if ([trees isKindOfClass:NSArray.class]) {
@@ -800,13 +674,13 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
                         }
                     }
                     BOOL resolved = (adContainer != nil);
-                    PD_RECORD_DATA_PATH(@"PdpCommentsAds", @"data.*.pdpCommentsAds", resolved, json, PDDataShapeCommentsAds);
+                    PDT_RECORD_DATA_PATH(@"PdpCommentsAds", @"data.*.pdpCommentsAds", resolved, json, PDTDataShapeCommentsAds);
 
                     if (prefs.promoted) {
                         if (resolved) {
-                            PDCOMPAT_ACTION_IF([adContainer[@"pdpCommentsAds"] isKindOfClass:NSArray.class] &&
-                                               [(NSArray *)adContainer[@"pdpCommentsAds"] count] > 0,
-                                           PDCompatPromoted, @"Comment ads cleared");
+                            PDTCOMPAT_ACTION_IF([adContainer[@"pdpCommentsAds"] isKindOfClass:NSArray.class] &&
+                                                [(NSArray *)adContainer[@"pdpCommentsAds"] count] > 0,
+                                           PDTCompatPromoted, @"Comment ads cleared");
                             adContainer[@"pdpCommentsAds"] = @[];
                         } else {
                             filterGenericResponse(json, prefs);
@@ -817,9 +691,9 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
                     filterGenericResponse(json, prefs);
                 }
 
-                if (PDAnyDropEnabled(prefs))
-                        PDWalkJSON(json, prefs, homeFeed, 0);
-                PDCOMPAT_INSPECT(json, prefs, homeFeed);
+                if (PDTAnyDropEnabled(prefs))
+                        PDTWalkJSON(json, prefs, homeFeed, 0);
+                PDTCOMPAT_INSPECT(json, prefs, homeFeed);
 
                 NSData *modifiedData = [NSJSONSerialization dataWithJSONObject:json options:0 error:nil];
                 completionHandler(modifiedData ?: data, response, error);
@@ -828,49 +702,7 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
 }
 %end
 
-// Reddit's post and comment models: awards, vote counts and AutoMod collapse.
-%group Models
-
-%hook Post
-- (NSArray *)awardingTotals {
-    return globalPrefs.awards ? nil : %orig;
-}
-- (NSUInteger)totalAwardsReceived {
-    return globalPrefs.awards ? 0 : %orig;
-}
-- (BOOL)canAward {
-    return globalPrefs.awards ? NO : %orig;
-}
-- (BOOL)isScoreHidden {
-    return globalPrefs.scores ? YES : %orig;
-}
-%end
-
-%hook Comment
-- (NSArray *)awardingTotals {
-    return globalPrefs.awards ? nil : %orig;
-}
-- (NSUInteger)totalAwardsReceived {
-    return globalPrefs.awards ? 0 : %orig;
-}
-- (BOOL)canAward {
-    return globalPrefs.awards ? NO : %orig;
-}
-- (BOOL)isScoreHidden {
-    return globalPrefs.scores ? YES : %orig;
-}
-- (BOOL)shouldAutoCollapse {
-    return globalPrefs.automod &&
-                   [((Comment *)self).authorPk isEqualToString:@"t2_6l4z3"]
-               ? YES
-               : %orig;
-}
-%end
-
-%end
-
 %ctor {
-    imageCache = [[NSCache alloc] init];
     ignoredOperationsSet = [[NSSet alloc] initWithObjects:
             @"GetAccount", @"FetchIdentityPreferences", @"DynamicConfigsByNames", @"GetAllExperimentVariants",
             @"UserLocation", @"CookiePreferences", @"FetchSubscribedSubreddits", @"AdsOffRedditPreferences", @"Age",
@@ -880,44 +712,5 @@ static void PDCompatInspectJSON(id value, PrimeDitPrefs prefs, BOOL homeFeed, in
             @"GetRedditUsersByIds", @"SubredditsForNames", @"SubredditsForIds", @"ExposeExperimentBatch",
             @"GetProfilePostFlairTemplates", @"GetRedditorByNameApollo", @"GetActiveSubreddits",
             @"UserPublicTrophies", @"BrandToolsStatus", nil];
-
-    assetBundles = [NSMutableArray array];
-    assetCatalogs = [NSMutableArray array];
-    [assetBundles addObject:NSBundle.mainBundle];
-
-    // Reddit's asset catalogs: the app, its bundles, its frameworks and their bundles.
-    NSFileManager *files = NSFileManager.defaultManager;
-    NSString *appPath = NSBundle.mainBundle.bundlePath;
-    for (NSString *file in [files contentsOfDirectoryAtPath:appPath error:nil]) {
-        if (![file hasSuffix:@"bundle"]) continue;
-        NSBundle *bundle = [NSBundle bundleWithPath:[appPath stringByAppendingPathComponent:file]];
-        if (bundle) [assetBundles addObject:bundle];
-    }
-    NSString *frameworksPath = [appPath stringByAppendingPathComponent:@"Frameworks"];
-    for (NSString *file in [files contentsOfDirectoryAtPath:frameworksPath error:nil]) {
-        if (![file hasSuffix:@"framework"]) continue;
-        NSString *frameworkPath = [frameworksPath stringByAppendingPathComponent:file];
-        NSBundle *framework = [NSBundle bundleWithPath:frameworkPath];
-        if (framework) [assetBundles addObject:framework];
-        for (NSString *inner in [files contentsOfDirectoryAtPath:frameworkPath error:nil]) {
-            if (![inner hasSuffix:@"bundle"]) continue;
-            NSBundle *bundle = [NSBundle bundleWithPath:[frameworkPath stringByAppendingPathComponent:inner]];
-            if (bundle) [assetBundles addObject:bundle];
-        }
-    }
-    // Reddit 2026.38 keeps its icons in RPLIcons_AssetsBundle (measured).
-    for (NSBundle *bundle in assetBundles)
-        if ([bundle.bundlePath.lastPathComponent isEqualToString:@"RPLIcons_AssetsBundle.bundle"]) gIconBundle = bundle;
-    for (NSBundle *bundle in assetBundles) {
-        NSError *error;
-        CUICatalog *catalog = [[%c(CUICatalog) alloc] initWithName:@"Assets" fromBundle:bundle error:&error];
-        if (catalog && !error) [assetCatalogs addObject:catalog];
-    }
-
-    loadPreferences();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, prefsNotificationCallback,
-                                    CFSTR(kPrimeDitPrefsNotification), NULL,
-                                    CFNotificationSuspensionBehaviorCoalesce);
     %init;
-    %init(Models, Comment = CoreClass(@"Comment"), Post = CoreClass(@"Post"));
 }

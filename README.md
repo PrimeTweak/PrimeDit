@@ -18,8 +18,7 @@ re-signed app.
 
 ## Build
 
-Actions → **Build** → Run workflow. The IPA link is optional: left empty, the latest Reddit comes
-from the App Store.
+Actions → **Build PrimeDit** → Run workflow with the link to a decrypted Reddit IPA.
 
 - **Debug**: IPA with the Compatibility tools, in the `debug` draft release
 - **Release** (default branch only): IPA and debs, in a draft release to publish

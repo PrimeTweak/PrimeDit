@@ -1,11 +1,11 @@
 #import <CoreFoundation/CoreFoundation.h>
-#import "SettingsViewController.h"
-#import "DataPaths.h"
-#import "Cache.h"
-#import "Compatibility.h"
+#import "PDTSettingsViewController.h"
+#import "PDTDataPaths.h"
+#import "PDTCache.h"
+#import "PDTCompatibility.h"
 
-extern UIImage *iconWithName(NSString *iconName);
-extern NSArray<UIColor *> *PDPaletteColors(NSInteger index);
+#import "PDTIcons.h"
+extern NSArray<UIColor *> *PDTPaletteColors(NSInteger index);
 
 // Tells every hook that an option changed.
 static void postPrefsUpdatedNotification(void) {
@@ -14,7 +14,7 @@ static void postPrefsUpdatedNotification(void) {
 }
 
 // Reddit asset icons are scaled to 20 pt in settings rows.
-static const CGFloat kPDIconSize = 20.0;
+static const CGFloat kPDTIconSize = 20.0;
 
 #import <objc/runtime.h>
 #import <objc/message.h>
@@ -22,31 +22,32 @@ static const CGFloat kPDIconSize = 20.0;
 #pragma mark - Native settings styling
 
 // Metrics measured on Reddit 2026.38's own Settings screen (3 px = 1 pt).
-static const CGFloat kPDRowHeight = 48.0;
-static const CGFloat kPDRowHeightWithSubtitle = 64.0;
-static const CGFloat kPDHeaderHeight = 32.0;
-static const CGFloat kPDSectionGap = 16.0;
-static const CGFloat kPDIconCenterX = 32.0;
-static const CGFloat kPDTextInset = 57.0;
-static const CGFloat kPDPlainTextInset = 20.0;
+static const CGFloat kPDTRowHeight = 48.0;
+static const CGFloat kPDTRowHeightWithSubtitle = 64.0;
+static const CGFloat kPDTHeaderHeight = 32.0;
+static const CGFloat kPDTSectionGap = 16.0;
+static const CGFloat kPDTLinkFooterHeight = 44.0;
+static const CGFloat kPDTIconCenterX = 32.0;
+static const CGFloat kPDTTextInset = 57.0;
+static const CGFloat kPDTPlainTextInset = 20.0;
 // Right edges measured on settings rows: switches at 12.0 pt, chevrons and checks
 // at 20.7 pt. Info buttons and trailing buttons sit on the same columns.
-static const CGFloat kPDSwitchColumnInset = 12.0;
-static const CGFloat kPDChevronColumnInset = 20.7;
+static const CGFloat kPDTSwitchColumnInset = 12.0;
+static const CGFloat kPDTChevronColumnInset = 20.7;
 // Transparent margin measured on the right of the 17 pt info.circle image.
-static const CGFloat kPDSymbolMargin = 2.0;
+static const CGFloat kPDTSymbolMargin = 2.0;
 // Raises the info circle so its bottom sits on the header's baseline (measured 6.0 pt low).
-static const CGFloat kPDInfoLift = 6.0;
+static const CGFloat kPDTInfoLift = 6.0;
 // Added under the last section so the last row ends 42.7 pt above the screen
 // bottom, like the last line of native Settings (measured).
-static const CGFloat kPDBottomSpace = 12.4;
+static const CGFloat kPDTBottomSpace = 12.4;
 
-static UIFont *PDSettingsFont(CGFloat size, BOOL bold) {
+static UIFont *PDTSettingsFont(CGFloat size, BOOL bold) {
     UIFont *font = [UIFont fontWithName:(bold ? @"RedditSans-Bold" : @"RedditSans-Regular") size:size];
     return font ?: [UIFont systemFontOfSize:size weight:(bold ? UIFontWeightBold : UIFontWeightRegular)];
 }
 
-static UIColor *PDHexColor(uint32_t hex) {
+static UIColor *PDTHexColor(uint32_t hex) {
     return [UIColor colorWithRed:((hex >> 16) & 0xFF) / 255.0
                            green:((hex >> 8) & 0xFF) / 255.0
                             blue:(hex & 0xFF) / 255.0
@@ -54,8 +55,8 @@ static UIColor *PDHexColor(uint32_t hex) {
 }
 
 // Light values are measured on Reddit; dark mode falls back to system colors.
-static UIColor *PDDynamicColor(uint32_t lightHex, UIColor *dark) {
-    UIColor *light = PDHexColor(lightHex);
+static UIColor *PDTDynamicColor(uint32_t lightHex, UIColor *dark) {
+    UIColor *light = PDTHexColor(lightHex);
     return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
         return traits.userInterfaceStyle == UIUserInterfaceStyleDark
                    ? [dark resolvedColorWithTraitCollection:traits]
@@ -63,44 +64,44 @@ static UIColor *PDDynamicColor(uint32_t lightHex, UIColor *dark) {
     }];
 }
 
-static UIColor *PDPrimaryColor(void) {
+static UIColor *PDTPrimaryColor(void) {
     static UIColor *color;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ color = PDDynamicColor(0x181B1E, UIColor.labelColor); });
+    dispatch_once(&once, ^{ color = PDTDynamicColor(0x181B1E, UIColor.labelColor); });
     return color;
 }
 
-static UIColor *PDSecondaryColor(void) {
+static UIColor *PDTSecondaryColor(void) {
     static UIColor *color;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ color = PDDynamicColor(0x5F6B73, UIColor.secondaryLabelColor); });
+    dispatch_once(&once, ^{ color = PDTDynamicColor(0x5F6B73, UIColor.secondaryLabelColor); });
     return color;
 }
 
 // Reddit's destructive red, measured on native "Delete account".
-static UIColor *PDDestructiveColor(void) {
+static UIColor *PDTDestructiveColor(void) {
     static UIColor *color;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ color = PDDynamicColor(0xAC2322, UIColor.systemRedColor); });
+    dispatch_once(&once, ^{ color = PDTDynamicColor(0xAC2322, UIColor.systemRedColor); });
     return color;
 }
 
 // Info buttons as pale next to their header as Instagram's (measured), in Reddit's cool gray.
-static UIColor *PDInfoColor(void) {
+static UIColor *PDTInfoColor(void) {
     static UIColor *color;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ color = PDDynamicColor(0x9FA9B0, UIColor.systemGray2Color); });
+    dispatch_once(&once, ^{ color = PDTDynamicColor(0x9FA9B0, UIColor.systemGray2Color); });
     return color;
 }
 
-static UIColor *PDSwitchOnColor(void) {
+static UIColor *PDTSwitchOnColor(void) {
     static UIColor *color;
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ color = PDDynamicColor(0x000000, UIColor.systemGreenColor); });
+    dispatch_once(&once, ^{ color = PDTDynamicColor(0x000000, UIColor.systemGreenColor); });
     return color;
 }
 
-static void PDPresentAlert(UIViewController *presenter, NSString *title, NSString *message) {
+static void PDTPresentAlert(UIViewController *presenter, NSString *title, NSString *message) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
@@ -108,29 +109,29 @@ static void PDPresentAlert(UIViewController *presenter, NSString *title, NSStrin
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-typedef NS_ENUM(NSInteger, PDAccessory) {
-    PDAccessoryNone,
-    PDAccessorySwitch,
-    PDAccessoryChevron,
-    PDAccessoryCheck,
+typedef NS_ENUM(NSInteger, PDTAccessory) {
+    PDTAccessoryNone,
+    PDTAccessorySwitch,
+    PDTAccessoryChevron,
+    PDTAccessoryCheck,
 };
 
 // Settings row laid out to the native metrics: 24 pt icon box centered at
 // x = 32, text from x = 57. The switch frame sits 14 pt from the trailing
 // edge, which puts its track on the measured 12 pt column.
-@interface PDSettingsCell : UITableViewCell
+@interface PDTSettingsCell : UITableViewCell
 @property(nonatomic, strong, readonly) UISwitch *toggle;
 - (void)configureWithTitle:(NSString *)title
                   subtitle:(NSString *)subtitle
                      value:(NSString *)value
                       icon:(UIImage *)icon
-                 accessory:(PDAccessory)accessory;
+                 accessory:(PDTAccessory)accessory;
 - (void)showSwatches:(NSArray<UIColor *> *)colors;
 - (void)setValueColor:(UIColor *)color;
 - (void)setTitleColor:(UIColor *)color;
 @end
 
-@implementation PDSettingsCell {
+@implementation PDTSettingsCell {
     UIImageView *_iconView;
     UILabel *_titleLabel;
     UILabel *_subtitleLabel;
@@ -148,16 +149,16 @@ typedef NS_ENUM(NSInteger, PDAccessory) {
 
     _iconView = [[UIImageView alloc] init];
     _iconView.contentMode = UIViewContentModeCenter;
-    _iconView.tintColor = PDPrimaryColor();
+    _iconView.tintColor = PDTPrimaryColor();
     _iconView.translatesAutoresizingMaskIntoConstraints = NO;
 
     _titleLabel = [[UILabel alloc] init];
-    _titleLabel.font = PDSettingsFont(17.0, NO);
-    _titleLabel.textColor = PDPrimaryColor();
+    _titleLabel.font = PDTSettingsFont(17.0, NO);
+    _titleLabel.textColor = PDTPrimaryColor();
 
     _subtitleLabel = [[UILabel alloc] init];
-    _subtitleLabel.font = PDSettingsFont(12.0, NO);
-    _subtitleLabel.textColor = PDSecondaryColor();
+    _subtitleLabel.font = PDTSettingsFont(12.0, NO);
+    _subtitleLabel.textColor = PDTSecondaryColor();
 
     UIStackView *text = [[UIStackView alloc] initWithArrangedSubviews:@[ _titleLabel, _subtitleLabel ]];
     text.axis = UILayoutConstraintAxisVertical;
@@ -165,14 +166,14 @@ typedef NS_ENUM(NSInteger, PDAccessory) {
     text.translatesAutoresizingMaskIntoConstraints = NO;
 
     _valueLabel = [[UILabel alloc] init];
-    _valueLabel.font = PDSettingsFont(16.0, NO);
-    _valueLabel.textColor = PDPrimaryColor();
+    _valueLabel.font = PDTSettingsFont(16.0, NO);
+    _valueLabel.textColor = PDTPrimaryColor();
     [_valueLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [_valueLabel setContentCompressionResistancePriority:UILayoutPriorityRequired
                                                  forAxis:UILayoutConstraintAxisHorizontal];
 
     _toggle = [[UISwitch alloc] init];
-    _toggle.onTintColor = PDSwitchOnColor();
+    _toggle.onTintColor = PDTSwitchOnColor();
 
     _markView = [[UIImageView alloc] init];
     _markView.contentMode = UIViewContentModeCenter;
@@ -195,11 +196,11 @@ typedef NS_ENUM(NSInteger, PDAccessory) {
     [self.contentView addSubview:trailing];
 
     _textLeading = [text.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor
-                                                      constant:kPDTextInset];
+                                                      constant:kPDTTextInset];
     _trailingInset = [trailing.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor
                                                              constant:-20.0];
     [NSLayoutConstraint activateConstraints:@[
-        [_iconView.centerXAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:kPDIconCenterX],
+        [_iconView.centerXAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:kPDTIconCenterX],
         [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         [_iconView.widthAnchor constraintEqualToConstant:24.0],
         [_iconView.heightAnchor constraintEqualToConstant:24.0],
@@ -216,36 +217,36 @@ typedef NS_ENUM(NSInteger, PDAccessory) {
                   subtitle:(NSString *)subtitle
                      value:(NSString *)value
                       icon:(UIImage *)icon
-                 accessory:(PDAccessory)accessory {
+                 accessory:(PDTAccessory)accessory {
     [self showSwatches:nil];
     _titleLabel.text = title;
-    _titleLabel.textColor = PDPrimaryColor();
-    _iconView.tintColor = PDPrimaryColor();
+    _titleLabel.textColor = PDTPrimaryColor();
+    _iconView.tintColor = PDTPrimaryColor();
     _subtitleLabel.text = subtitle;
     _subtitleLabel.hidden = subtitle.length == 0;
     _valueLabel.text = value;
     _valueLabel.hidden = value.length == 0;
-    _valueLabel.textColor = PDPrimaryColor();
+    _valueLabel.textColor = PDTPrimaryColor();
     _iconView.image = icon;
     _iconView.hidden = icon == nil;
-    _textLeading.constant = icon ? kPDTextInset : kPDPlainTextInset;
+    _textLeading.constant = icon ? kPDTTextInset : kPDTPlainTextInset;
 
-    _toggle.hidden = accessory != PDAccessorySwitch;
-    _markView.hidden = accessory != PDAccessoryChevron && accessory != PDAccessoryCheck;
-    if (accessory == PDAccessoryChevron) {
+    _toggle.hidden = accessory != PDTAccessorySwitch;
+    _markView.hidden = accessory != PDTAccessoryChevron && accessory != PDTAccessoryCheck;
+    if (accessory == PDTAccessoryChevron) {
         _markView.image = [UIImage systemImageNamed:@"chevron.right"
                                   withConfiguration:[UIImageSymbolConfiguration
                                                         configurationWithPointSize:14.0
                                                                             weight:UIImageSymbolWeightSemibold]];
-        _markView.tintColor = PDSecondaryColor();
-    } else if (accessory == PDAccessoryCheck) {
+        _markView.tintColor = PDTSecondaryColor();
+    } else if (accessory == PDTAccessoryCheck) {
         _markView.image = [UIImage systemImageNamed:@"checkmark"
                                   withConfiguration:[UIImageSymbolConfiguration
                                                         configurationWithPointSize:15.0
                                                                             weight:UIImageSymbolWeightSemibold]];
-        _markView.tintColor = PDPrimaryColor();
+        _markView.tintColor = PDTPrimaryColor();
     }
-    _trailingInset.constant = accessory == PDAccessorySwitch ? -14.0 : -20.0;
+    _trailingInset.constant = accessory == PDTAccessorySwitch ? -14.0 : -20.0;
     self.selectionStyle = UITableViewCellSelectionStyleNone;
 }
 
@@ -288,20 +289,20 @@ typedef NS_ENUM(NSInteger, PDAccessory) {
 @end
 
 // Reddit's Settings headers, measured: Reddit Sans SemiBold 13 pt, 0.35 pt tracking.
-static UIFont *PDHeaderFont(void) {
-    return [UIFont fontWithName:@"RedditSans-SemiBold" size:13.0] ?: PDSettingsFont(13.0, YES);
+static UIFont *PDTHeaderFont(void) {
+    return [UIFont fontWithName:@"RedditSans-SemiBold" size:13.0] ?: PDTSettingsFont(13.0, YES);
 }
 
 // Section header in caps at x = 20, baseline 4.5 pt above the bottom; when the
 // section has help, an info button on the given column, its circle on the baseline.
-static UIView *PDSectionHeaderViewWithInfo(NSString *title, CGFloat column, void (^onInfo)(void)) {
+static UIView *PDTSectionHeaderViewWithInfo(NSString *title, CGFloat column, void (^onInfo)(void)) {
     UIView *container = [[UIView alloc] init];
     container.backgroundColor = UIColor.systemBackgroundColor;
     UILabel *label = [[UILabel alloc] init];
     label.attributedText = [[NSAttributedString alloc] initWithString:title.uppercaseString
                                                            attributes:@{
-                                                               NSFontAttributeName : PDHeaderFont(),
-                                                               NSForegroundColorAttributeName : PDSecondaryColor(),
+                                                               NSFontAttributeName : PDTHeaderFont(),
+                                                               NSForegroundColorAttributeName : PDTSecondaryColor(),
                                                                NSKernAttributeName : @0.35,
                                                            }];
     label.translatesAutoresizingMaskIntoConstraints = NO;
@@ -315,7 +316,7 @@ static UIView *PDSectionHeaderViewWithInfo(NSString *title, CGFloat column, void
         UIImageSymbolConfiguration *symbol =
                 [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightRegular];
         [info setImage:[UIImage systemImageNamed:@"info.circle" withConfiguration:symbol] forState:UIControlStateNormal];
-        info.tintColor = PDInfoColor();
+        info.tintColor = PDTInfoColor();
         info.contentHorizontalAlignment = UIControlContentHorizontalAlignmentRight;
         info.accessibilityLabel = [@"About " stringByAppendingString:title];
         [info addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
@@ -325,8 +326,8 @@ static UIView *PDSectionHeaderViewWithInfo(NSString *title, CGFloat column, void
         info.translatesAutoresizingMaskIntoConstraints = NO;
         [container addSubview:info];
         [constraints addObjectsFromArray:@[
-            [info.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-(column - kPDSymbolMargin)],
-            [info.centerYAnchor constraintEqualToAnchor:label.centerYAnchor constant:-kPDInfoLift],
+            [info.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-(column - kPDTSymbolMargin)],
+            [info.centerYAnchor constraintEqualToAnchor:label.centerYAnchor constant:-kPDTInfoLift],
             [info.widthAnchor constraintEqualToConstant:44.0],
             [info.heightAnchor constraintEqualToConstant:44.0],
             [label.trailingAnchor constraintLessThanOrEqualToAnchor:info.leadingAnchor constant:-4.0],
@@ -339,16 +340,16 @@ static UIView *PDSectionHeaderViewWithInfo(NSString *title, CGFloat column, void
     return container;
 }
 
-static UIView *PDSectionHeaderView(NSString *title) {
-    return PDSectionHeaderViewWithInfo(title, 0, nil);
+static UIView *PDTSectionHeaderView(NSString *title) {
+    return PDTSectionHeaderViewWithInfo(title, 0, nil);
 }
 
-static UIView *PDSectionFooterView(NSString *text) {
+static UIView *PDTSectionFooterView(NSString *text) {
     UIView *container = [[UIView alloc] init];
     container.backgroundColor = UIColor.systemBackgroundColor;
     UILabel *label = [[UILabel alloc] init];
-    label.font = PDSettingsFont(12.0, NO);
-    label.textColor = PDSecondaryColor();
+    label.font = PDTSettingsFont(12.0, NO);
+    label.textColor = PDTSecondaryColor();
     label.numberOfLines = 0;
     label.text = text;
     label.translatesAutoresizingMaskIntoConstraints = NO;
@@ -361,44 +362,30 @@ static UIView *PDSectionFooterView(NSString *text) {
     return container;
 }
 
-static CGFloat PDFooterHeight(NSString *text, CGFloat width) {
+static CGFloat PDTFooterHeight(NSString *text, CGFloat width) {
     CGRect bounds = [text boundingRectWithSize:CGSizeMake(MAX(width - 41.0, 1.0), CGFLOAT_MAX)
                                        options:NSStringDrawingUsesLineFragmentOrigin
-                                    attributes:@{NSFontAttributeName : PDSettingsFont(12.0, NO)}
+                                    attributes:@{NSFontAttributeName : PDTSettingsFont(12.0, NO)}
                                        context:nil];
-    return ceil(bounds.size.height) + 6.0 + kPDSectionGap;
+    return ceil(bounds.size.height) + 6.0 + kPDTSectionGap;
 }
 
-static void PDStyleSettingsTable(UITableView *tableView) {
+static void PDTStyleSettingsTable(UITableView *tableView) {
     tableView.backgroundColor = UIColor.systemBackgroundColor;
     tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     tableView.sectionHeaderTopPadding = 0;
-    tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, kPDBottomSpace)];
-    [tableView registerClass:PDSettingsCell.class forCellReuseIdentifier:@"PDSettingsCell"];
+    tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, kPDTBottomSpace)];
+    [tableView registerClass:PDTSettingsCell.class forCellReuseIdentifier:@"PDTSettingsCell"];
 }
 
-// Under the last section of the main page: the "How it works" link, aligned
-// with the section titles, then the credit in the system's light gray.
-static UIView *PDSettingsFooter(id target, SEL action) {
-    UIButtonConfiguration *style = [UIButtonConfiguration plainButtonConfiguration];
-    UIImageSymbolConfiguration *glyph =
-            [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightRegular];
-    style.image = [UIImage systemImageNamed:@"info.circle" withConfiguration:glyph];
-    style.imagePadding = 6.0;
-    style.contentInsets = NSDirectionalEdgeInsetsZero;
-    style.baseForegroundColor = UIColor.linkColor;
-    style.attributedTitle = [[NSAttributedString alloc] initWithString:@"How it works"
-                                                            attributes:@{NSFontAttributeName : PDSettingsFont(15, NO)}];
-    UIButton *link = [UIButton buttonWithConfiguration:style primaryAction:nil];
-    link.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
-    [link addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
-    link.translatesAutoresizingMaskIntoConstraints = NO;
+// Credit under the last section of the main page, in the system's light gray.
+static UIView *PDTCreditFooter(void) {
     UILabel *name = [[UILabel alloc] init];
     name.text = @"PrimeDit";
-    name.font = PDSettingsFont(15, YES);
+    name.font = PDTSettingsFont(15, YES);
     UILabel *credit = [[UILabel alloc] init];
     credit.text = @"Original work by @level3tjg";
-    credit.font = PDSettingsFont(13, NO);
+    credit.font = PDTSettingsFont(13, NO);
     credit.numberOfLines = 0;
     for (UILabel *label in @[ name, credit ]) {
         label.textColor = UIColor.systemGray3Color;
@@ -408,23 +395,44 @@ static UIView *PDSettingsFooter(id target, SEL action) {
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = -2;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
-    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 140)];
-    [footer addSubview:link];
+    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 100)];
     [footer addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [link.topAnchor constraintEqualToAnchor:footer.topAnchor constant:4],
-        [link.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
-        [link.heightAnchor constraintEqualToConstant:44],
-        [stack.topAnchor constraintEqualToAnchor:link.bottomAnchor constant:12],
+        [stack.topAnchor constraintEqualToAnchor:footer.topAnchor constant:21],
         [stack.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
         [stack.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-20],
       ]];
     return footer;
 }
 
+// The "How it works" link under the last section, in the footer's gray, its
+// icon centered on the row icons.
+static UIView *PDTHowItWorksFooter(id target, SEL action) {
+    UIImageSymbolConfiguration *size =
+            [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightRegular];
+    UIImage *glyph = [UIImage systemImageNamed:@"info.circle" withConfiguration:size];
+    UIButtonConfiguration *style = [UIButtonConfiguration plainButtonConfiguration];
+    style.image = glyph;
+    style.imagePadding = 6.0;
+    style.contentInsets = NSDirectionalEdgeInsetsMake(8.0, 0.0, 16.0, 12.0);
+    style.baseForegroundColor = UIColor.systemGray3Color;
+    style.attributedTitle = [[NSAttributedString alloc] initWithString:@"How it works"
+                                                            attributes:@{NSFontAttributeName : PDTSettingsFont(15, NO)}];
+    UIButton *link = [UIButton buttonWithConfiguration:style primaryAction:nil];
+    [link addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    link.translatesAutoresizingMaskIntoConstraints = NO;
+    UIView *footer = [[UIView alloc] init];
+    [footer addSubview:link];
+    [NSLayoutConstraint activateConstraints:@[
+        [link.topAnchor constraintEqualToAnchor:footer.topAnchor],
+        [link.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:kPDTIconCenterX - glyph.size.width / 2.0],
+      ]];
+    return footer;
+}
+
 // A custom view rather than the system Done item, whose iOS 26 style ignores
 // tintColor and draws a washed-out checkmark. Same glyph as PrimeSenger's.
-static UIBarButtonItem *PDDoneItem(id target, SEL action) {
+static UIBarButtonItem *PDTDoneItem(id target, SEL action) {
     UIImageSymbolConfiguration *check =
             [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightSemibold];
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -436,11 +444,11 @@ static UIBarButtonItem *PDDoneItem(id target, SEL action) {
     return [[UIBarButtonItem alloc] initWithCustomView:button];
 }
 
-static UIImage *PDRowIcon(NSArray<NSString *> *names) {
+static UIImage *PDTRowIcon(NSArray<NSString *> *names) {
     for (NSString *name in names) {
-        UIImage *image = iconWithName(name);
+        UIImage *image = PDTIconWithName(name);
         if (image)
-            return [[image imageScaledToSize:CGSizeMake(kPDIconSize, kPDIconSize)]
+            return [[image imageScaledToSize:CGSizeMake(kPDTIconSize, kPDTIconSize)]
                     imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     }
     return nil;
@@ -448,45 +456,45 @@ static UIImage *PDRowIcon(NSArray<NSString *> *names) {
 
 #pragma mark - Help sheet
 
-@interface PDHelpItem : NSObject
+@interface PDTHelpItem : NSObject
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *text;
 @property(nonatomic, strong) UIImage *icon;
 @end
 
-@implementation PDHelpItem
+@implementation PDTHelpItem
 @end
 
-static PDHelpItem *PDHelp(NSString *title, NSString *text, UIImage *icon) {
-    PDHelpItem *item = [[PDHelpItem alloc] init];
+static PDTHelpItem *PDTHelp(NSString *title, NSString *text, UIImage *icon) {
+    PDTHelpItem *item = [[PDTHelpItem alloc] init];
     item.title = title;
     item.text = text;
     item.icon = icon;
     return item;
 }
 
-static const CGFloat kPDHelpTitleTop = 26.0;
-static const CGFloat kPDHelpListGap = 26.0;
-static const CGFloat kPDHelpBottom = 28.0;
-static const CGFloat kPDHelpSideInset = 24.0;
+static const CGFloat kPDTHelpTitleTop = 26.0;
+static const CGFloat kPDTHelpListGap = 26.0;
+static const CGFloat kPDTHelpBottom = 28.0;
+static const CGFloat kPDTHelpSideInset = 24.0;
 
 // One option in a help sheet: its icon, its name in bold, then a sentence.
-static UIView *PDHelpRow(PDHelpItem *item) {
+static UIView *PDTHelpRow(PDTHelpItem *item) {
     UILabel *name = [[UILabel alloc] init];
-    name.font = PDSettingsFont(17.0, YES);
-    name.textColor = PDPrimaryColor();
+    name.font = PDTSettingsFont(17.0, YES);
+    name.textColor = PDTPrimaryColor();
     name.numberOfLines = 0;
     name.text = item.title;
     UILabel *text = [[UILabel alloc] init];
-    text.font = PDSettingsFont(15.0, NO);
-    text.textColor = PDSecondaryColor();
+    text.font = PDTSettingsFont(15.0, NO);
+    text.textColor = PDTSecondaryColor();
     text.numberOfLines = 0;
     text.text = item.text;
     UIStackView *words = [[UIStackView alloc] initWithArrangedSubviews:@[ name, text ]];
     words.axis = UILayoutConstraintAxisVertical;
     words.spacing = 3.0;
     UIImageView *icon = [[UIImageView alloc] initWithImage:item.icon];
-    icon.tintColor = PDPrimaryColor();
+    icon.tintColor = PDTPrimaryColor();
     icon.contentMode = UIViewContentModeCenter;
     icon.hidden = item.icon == nil;
     icon.translatesAutoresizingMaskIntoConstraints = NO;
@@ -501,19 +509,19 @@ static UIView *PDHelpRow(PDHelpItem *item) {
 
 // Sheet behind a section's info button: centered title, close button, then the options
 // whose title needs a word of explanation.
-@interface PDHelpSheetViewController : UIViewController
-- (instancetype)initWithTitle:(NSString *)title items:(NSArray<PDHelpItem *> *)items;
+@interface PDTHelpSheetViewController : UIViewController
+- (instancetype)initWithTitle:(NSString *)title items:(NSArray<PDTHelpItem *> *)items;
 - (CGFloat)fittingHeightForWidth:(CGFloat)width;
 @end
 
-@implementation PDHelpSheetViewController {
+@implementation PDTHelpSheetViewController {
     NSString *_sheetTitle;
-    NSArray<PDHelpItem *> *_items;
+    NSArray<PDTHelpItem *> *_items;
     UILabel *_titleLabel;
     UIStackView *_list;
 }
 
-- (instancetype)initWithTitle:(NSString *)title items:(NSArray<PDHelpItem *> *)items {
+- (instancetype)initWithTitle:(NSString *)title items:(NSArray<PDTHelpItem *> *)items {
     self = [super initWithNibName:nil bundle:nil];
     if (!self) return nil;
     _sheetTitle = [title copy];
@@ -526,8 +534,8 @@ static UIView *PDHelpRow(PDHelpItem *item) {
     self.view.backgroundColor = UIColor.systemBackgroundColor;
 
     _titleLabel = [[UILabel alloc] init];
-    _titleLabel.font = PDSettingsFont(17.0, YES);
-    _titleLabel.textColor = PDPrimaryColor();
+    _titleLabel.font = PDTSettingsFont(17.0, YES);
+    _titleLabel.textColor = PDTPrimaryColor();
     _titleLabel.textAlignment = NSTextAlignmentCenter;
     _titleLabel.text = _sheetTitle;
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -536,7 +544,7 @@ static UIView *PDHelpRow(PDHelpItem *item) {
     UIImageSymbolConfiguration *symbol =
             [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightSemibold];
     [close setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:symbol] forState:UIControlStateNormal];
-    close.tintColor = PDPrimaryColor();
+    close.tintColor = PDTPrimaryColor();
     close.backgroundColor = UIColor.tertiarySystemFillColor;
     close.layer.cornerRadius = 20.0;
     close.accessibilityLabel = @"Close";
@@ -547,22 +555,22 @@ static UIView *PDHelpRow(PDHelpItem *item) {
     _list.axis = UILayoutConstraintAxisVertical;
     _list.spacing = 22.0;
     _list.translatesAutoresizingMaskIntoConstraints = NO;
-    for (PDHelpItem *item in _items) [_list addArrangedSubview:PDHelpRow(item)];
+    for (PDTHelpItem *item in _items) [_list addArrangedSubview:PDTHelpRow(item)];
 
     [self.view addSubview:_titleLabel];
     [self.view addSubview:close];
     [self.view addSubview:_list];
     [NSLayoutConstraint activateConstraints:@[
-        [_titleLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:kPDHelpTitleTop],
+        [_titleLabel.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:kPDTHelpTitleTop],
         [_titleLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [_titleLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:64.0],
         [close.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
         [close.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16.0],
         [close.widthAnchor constraintEqualToConstant:40.0],
         [close.heightAnchor constraintEqualToConstant:40.0],
-        [_list.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:kPDHelpListGap],
-        [_list.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kPDHelpSideInset],
-        [_list.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kPDHelpSideInset],
+        [_list.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:kPDTHelpListGap],
+        [_list.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kPDTHelpSideInset],
+        [_list.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kPDTHelpSideInset],
       ]];
 }
 
@@ -572,24 +580,24 @@ static UIView *PDHelpRow(PDHelpItem *item) {
 
 - (CGFloat)fittingHeightForWidth:(CGFloat)width {
     [self loadViewIfNeeded];
-    CGSize list = [_list systemLayoutSizeFittingSize:CGSizeMake(width - 2.0 * kPDHelpSideInset,
+    CGSize list = [_list systemLayoutSizeFittingSize:CGSizeMake(width - 2.0 * kPDTHelpSideInset,
                                                                 UILayoutFittingCompressedSize.height)
                        withHorizontalFittingPriority:UILayoutPriorityRequired
                              verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
-    return kPDHelpTitleTop + ceil(_titleLabel.font.lineHeight) + kPDHelpListGap + ceil(list.height) + kPDHelpBottom;
+    return kPDTHelpTitleTop + ceil(_titleLabel.font.lineHeight) + kPDTHelpListGap + ceil(list.height) + kPDTHelpBottom;
 }
 @end
 
 // Presents the sheet at the height of its content.
-static void PDPresentHelpSheet(UIViewController *presenter, NSString *title, NSArray<PDHelpItem *> *items) {
+static void PDTPresentHelpSheet(UIViewController *presenter, NSString *title, NSArray<PDTHelpItem *> *items) {
     if (!presenter || !items.count) return;
-    PDHelpSheetViewController *sheet = [[PDHelpSheetViewController alloc] initWithTitle:title items:items];
+    PDTHelpSheetViewController *sheet = [[PDTHelpSheetViewController alloc] initWithTitle:title items:items];
     sheet.modalPresentationStyle = UIModalPresentationPageSheet;
     UISheetPresentationController *controller = sheet.sheetPresentationController;
     CGFloat width = presenter.view.bounds.size.width;
-    __weak PDHelpSheetViewController *weakSheet = sheet;
+    __weak PDTHelpSheetViewController *weakSheet = sheet;
     controller.detents = @[ [UISheetPresentationControllerDetent
-            customDetentWithIdentifier:@"PDHelpSheet"
+            customDetentWithIdentifier:@"PDTHelpSheet"
                               resolver:^CGFloat(id<UISheetPresentationControllerDetentResolutionContext> context) {
                                   return MIN([weakSheet fittingHeightForWidth:width], context.maximumDetentValue);
                               }] ];
@@ -600,24 +608,24 @@ static void PDPresentHelpSheet(UIViewController *presenter, NSString *title, NSA
 #pragma mark - Comment thread lines page
 
 // Palette names in stored index order; -1 keeps Reddit's color.
-static NSString *const kPDPaletteNames[15] = {
+static NSString *const kPDTPaletteNames[15] = {
     @"Sunset", @"Cyberpunk", @"Synthwave", @"Matrix", @"Nord", @"Dracula", @"Gruvbox", @"Tokyo Night",
     @"Rose Pine", @"Solarized", @"Neon", @"Ocean", @"Pastel", @"Mono", @"Rainbow"};
-static const NSInteger kPDPaletteOrder[16] = {-1, 14, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
-static const CGFloat kPDThicknesses[6] = {0.5, 1.0, 1.5, 2.0, 2.5, 3.0};
+static const NSInteger kPDTPaletteOrder[16] = {-1, 14, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+static const CGFloat kPDTThicknesses[6] = {0.5, 1.0, 1.5, 2.0, 2.5, 3.0};
 
-static NSString *PDPaletteName(NSInteger index) {
-    return (index >= 0 && index < 15) ? kPDPaletteNames[index] : @"Original";
+static NSString *PDTPaletteName(NSInteger index) {
+    return (index >= 0 && index < 15) ? kPDTPaletteNames[index] : @"Original";
 }
 
-static NSInteger PDCurrentPaletteIndex(void) {
+static NSInteger PDTCurrentPaletteIndex(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     return [defaults objectForKey:kPrimeDitThreadThemeIndex]
                ? [defaults integerForKey:kPrimeDitThreadThemeIndex]
                : -1;
 }
 
-static NSString *PDThicknessLabel(void) {
+static NSString *PDTThicknessLabel(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     float value = [defaults floatForKey:kPrimeDitThreadLineThickness];
     return ([defaults objectForKey:kPrimeDitThreadLineThickness] && value > 0)
@@ -625,54 +633,54 @@ static NSString *PDThicknessLabel(void) {
                : @"Default";
 }
 
-static NSString *PDThreadLinesSummary(void) {
+static NSString *PDTThreadLinesSummary(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     if (![defaults boolForKey:kPrimeDitThreadLinesEnabled]) return @"Off";
     if ([defaults boolForKey:kPrimeDitThreadRainbowMode]) return @"Random";
-    return PDPaletteName(PDCurrentPaletteIndex());
+    return PDTPaletteName(PDTCurrentPaletteIndex());
 }
 
 // Line coloring, stored as the rainbow and depth-cycling switches.
-typedef NS_ENUM(NSInteger, PDLineColoring) {
-    PDLineColoringByDepth,
-    PDLineColoringSingle,
-    PDLineColoringRandom,
+typedef NS_ENUM(NSInteger, PDTLineColoring) {
+    PDTLineColoringByDepth,
+    PDTLineColoringSingle,
+    PDTLineColoringRandom,
 };
 
-static NSString *const kPDColoringTitles[3] = {@"By depth", @"Single color", @"Random"};
-static NSString *const kPDColoringHelp[3] = {@"Each reply level takes the next color of the palette.",
-                                             @"Every line takes the palette\u2019s first color.",
-                                             @"Each line gets its own random color. No palette needed."};
-static NSString *const kPDColoringSymbols[3] = {@"list.bullet.indent", @"minus", @"shuffle"};
+static NSString *const kPDTColoringTitles[3] = {@"By depth", @"Single color", @"Random"};
+static NSString *const kPDTColoringHelp[3] = {@"Each reply level takes the next color of the palette.",
+                                              @"Every line takes the palette\u2019s first color.",
+                                              @"Each line gets its own random color. No palette needed."};
+static NSString *const kPDTColoringSymbols[3] = {@"list.bullet.indent", @"minus", @"shuffle"};
 
-static PDLineColoring PDCurrentColoring(void) {
-    if ([NSUserDefaults.standardUserDefaults boolForKey:kPrimeDitThreadRainbowMode]) return PDLineColoringRandom;
-    return PDPrefBool(kPrimeDitThreadDepthCycling, YES) ? PDLineColoringByDepth : PDLineColoringSingle;
+static PDTLineColoring PDTCurrentColoring(void) {
+    if ([NSUserDefaults.standardUserDefaults boolForKey:kPrimeDitThreadRainbowMode]) return PDTLineColoringRandom;
+    return PDTPrefBool(kPrimeDitThreadDepthCycling, YES) ? PDTLineColoringByDepth : PDTLineColoringSingle;
 }
 
-static void PDSetColoring(PDLineColoring coloring) {
+static void PDTSetColoring(PDTLineColoring coloring) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    [defaults setBool:(coloring == PDLineColoringRandom) forKey:kPrimeDitThreadRainbowMode];
-    if (coloring != PDLineColoringRandom)
-        [defaults setBool:(coloring == PDLineColoringByDepth) forKey:kPrimeDitThreadDepthCycling];
+    [defaults setBool:(coloring == PDTLineColoringRandom) forKey:kPrimeDitThreadRainbowMode];
+    if (coloring != PDTLineColoringRandom)
+        [defaults setBool:(coloring == PDTLineColoringByDepth) forKey:kPrimeDitThreadDepthCycling];
     postPrefsUpdatedNotification();
 }
 
-@interface PDThreadLinesViewController : UITableViewController
+@interface PDTThreadLinesViewController : UITableViewController
 @end
 
-@implementation PDThreadLinesViewController
+@implementation PDTThreadLinesViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Comment thread lines";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
+    PDTStyleSettingsTable(self.tableView);
 }
 
 // Lines, Coloring and Palette; Random coloring has no use for a palette.
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return PDCurrentColoring() == PDLineColoringRandom ? 2 : 3;
+    return PDTCurrentColoring() == PDTLineColoringRandom ? 2 : 3;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -680,34 +688,34 @@ static void PDSetColoring(PDLineColoring coloring) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
     if (indexPath.section == 2) {
-        NSInteger index = kPDPaletteOrder[indexPath.row];
-        [cell configureWithTitle:PDPaletteName(index)
+        NSInteger index = kPDTPaletteOrder[indexPath.row];
+        [cell configureWithTitle:PDTPaletteName(index)
                         subtitle:nil
                            value:nil
                             icon:nil
-                       accessory:(index == PDCurrentPaletteIndex() ? PDAccessoryCheck : PDAccessoryNone)];
-        [cell showSwatches:PDPaletteColors(index)];
+                       accessory:(index == PDTCurrentPaletteIndex() ? PDTAccessoryCheck : PDTAccessoryNone)];
+        [cell showSwatches:PDTPaletteColors(index)];
         return cell;
     }
     if (indexPath.section == 1) {
-        [cell configureWithTitle:kPDColoringTitles[indexPath.row]
+        [cell configureWithTitle:kPDTColoringTitles[indexPath.row]
                         subtitle:nil
                            value:nil
                             icon:nil
-                       accessory:(indexPath.row == PDCurrentColoring() ? PDAccessoryCheck : PDAccessoryNone)];
+                       accessory:(indexPath.row == PDTCurrentColoring() ? PDTAccessoryCheck : PDTAccessoryNone)];
         return cell;
     }
     if (indexPath.row == 1) {
         [cell configureWithTitle:@"Thickness"
                         subtitle:nil
-                           value:PDThicknessLabel()
+                           value:PDTThicknessLabel()
                             icon:nil
-                       accessory:PDAccessoryChevron];
+                       accessory:PDTAccessoryChevron];
         return cell;
     }
-    [cell configureWithTitle:@"Color lines" subtitle:nil value:nil icon:nil accessory:PDAccessorySwitch];
+    [cell configureWithTitle:@"Color lines" subtitle:nil value:nil icon:nil accessory:PDTAccessorySwitch];
     cell.toggle.on = [NSUserDefaults.standardUserDefaults boolForKey:kPrimeDitThreadLinesEnabled];
     [cell.toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
     return cell;
@@ -719,54 +727,54 @@ static void PDSetColoring(PDLineColoring coloring) {
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    if (section != 1) return PDSectionHeaderView(section == 0 ? @"Lines" : @"Palette");
-    __weak PDThreadLinesViewController *weakSelf = self;
-    return PDSectionHeaderViewWithInfo(@"Coloring", kPDChevronColumnInset, ^{
+    if (section != 1) return PDTSectionHeaderView(section == 0 ? @"Lines" : @"Palette");
+    __weak PDTThreadLinesViewController *weakSelf = self;
+    return PDTSectionHeaderViewWithInfo(@"Coloring", kPDTChevronColumnInset, ^{
         [weakSelf showColoringHelp];
     });
 }
 
 - (void)showColoringHelp {
-    NSMutableArray<PDHelpItem *> *items = [NSMutableArray array];
+    NSMutableArray<PDTHelpItem *> *items = [NSMutableArray array];
     for (NSInteger i = 0; i < 3; i++) {
-        UIImage *icon = [UIImage systemImageNamed:kPDColoringSymbols[i]
+        UIImage *icon = [UIImage systemImageNamed:kPDTColoringSymbols[i]
                                 withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:17.0]];
-        [items addObject:PDHelp(kPDColoringTitles[i], kPDColoringHelp[i], icon)];
+        [items addObject:PDTHelp(kPDTColoringTitles[i], kPDTColoringHelp[i], icon)];
     }
-    PDPresentHelpSheet(self, @"Coloring", items);
+    PDTPresentHelpSheet(self, @"Coloring", items);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section == 2) {
-        [NSUserDefaults.standardUserDefaults setInteger:kPDPaletteOrder[indexPath.row]
+        [NSUserDefaults.standardUserDefaults setInteger:kPDTPaletteOrder[indexPath.row]
                                                  forKey:kPrimeDitThreadThemeIndex];
         postPrefsUpdatedNotification();
         [tableView reloadData];
     } else if (indexPath.section == 1) {
-        [self chooseColoring:(PDLineColoring)indexPath.row];
+        [self chooseColoring:(PDTLineColoring)indexPath.row];
     } else if (indexPath.row == 1) {
         [self chooseThicknessFromView:[tableView cellForRowAtIndexPath:indexPath]];
     }
 }
 
 // The palette section fades out with Random and back in with the other two.
-- (void)chooseColoring:(PDLineColoring)coloring {
-    BOOL hadPalette = PDCurrentColoring() != PDLineColoringRandom;
-    PDSetColoring(coloring);
-    BOOL hasPalette = coloring != PDLineColoringRandom;
+- (void)chooseColoring:(PDTLineColoring)coloring {
+    BOOL hadPalette = PDTCurrentColoring() != PDTLineColoringRandom;
+    PDTSetColoring(coloring);
+    BOOL hasPalette = coloring != PDTLineColoringRandom;
     UITableView *tableView = self.tableView;
     [tableView performBatchUpdates:^{
         [tableView reloadSections:[NSIndexSet indexSetWithIndex:1] withRowAnimation:UITableViewRowAnimationNone];
@@ -782,7 +790,7 @@ static void PDSetColoring(PDLineColoring coloring) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Thickness"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak PDThreadLinesViewController *weakSelf = self;
+    __weak PDTThreadLinesViewController *weakSelf = self;
     void (^choose)(CGFloat) = ^(CGFloat value) {
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
         if (value > 0)
@@ -795,8 +803,8 @@ static void PDSetColoring(PDLineColoring coloring) {
     [sheet addAction:[UIAlertAction actionWithTitle:@"Default"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) { choose(0); }]];
-    for (size_t i = 0; i < sizeof(kPDThicknesses) / sizeof(kPDThicknesses[0]); i++) {
-        CGFloat value = kPDThicknesses[i];
+    for (size_t i = 0; i < sizeof(kPDTThicknesses) / sizeof(kPDTThicknesses[0]); i++) {
+        CGFloat value = kPDTThicknesses[i];
         [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"%.1f pt", value]
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction *action) { choose(value); }]];
@@ -811,10 +819,10 @@ static void PDSetColoring(PDLineColoring coloring) {
 
 #pragma mark - Left menu page
 
-static NSString *const kPDLeftMenuEmpty = @"Open the left menu once to list its sections.";
+static NSString *const kPDTLeftMenuEmpty = @"Open the left menu once to list its sections.";
 
 // Sections the left menu showed last time, then hidden ones it no longer shows.
-static NSArray<NSString *> *PDLeftMenuSections(void) {
+static NSArray<NSString *> *PDTLeftMenuSections(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSMutableArray<NSString *> *sections = [NSMutableArray array];
     for (NSString *key in @[ kPrimeDitLeftMenuSections, kPrimeDitLeftMenuHidden ])
@@ -823,19 +831,19 @@ static NSArray<NSString *> *PDLeftMenuSections(void) {
     return sections;
 }
 
-static BOOL PDLeftMenuSectionHidden(NSString *title) {
+static BOOL PDTLeftMenuSectionHidden(NSString *title) {
     return [[NSUserDefaults.standardUserDefaults arrayForKey:kPrimeDitLeftMenuHidden] containsObject:title];
 }
 
-static NSString *PDLeftMenuSummary(void) {
+static NSString *PDTLeftMenuSummary(void) {
     NSUInteger hidden = [NSUserDefaults.standardUserDefaults arrayForKey:kPrimeDitLeftMenuHidden].count;
     return hidden ? [NSString stringWithFormat:@"%lu hidden", (unsigned long)hidden] : nil;
 }
 
-@interface PDLeftMenuViewController : UITableViewController
+@interface PDTLeftMenuViewController : UITableViewController
 @end
 
-@implementation PDLeftMenuViewController {
+@implementation PDTLeftMenuViewController {
     NSArray<NSString *> *_sections;
 }
 
@@ -843,12 +851,12 @@ static NSString *PDLeftMenuSummary(void) {
     [super viewDidLoad];
     self.title = @"Left menu";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
+    PDTStyleSettingsTable(self.tableView);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    _sections = PDLeftMenuSections();
+    _sections = PDTLeftMenuSections();
     [self.tableView reloadData];
 }
 
@@ -861,10 +869,10 @@ static NSString *PDLeftMenuSummary(void) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
     NSString *title = _sections[indexPath.row];
-    [cell configureWithTitle:title subtitle:nil value:nil icon:nil accessory:PDAccessorySwitch];
-    cell.toggle.on = !PDLeftMenuSectionHidden(title);
+    [cell configureWithTitle:title subtitle:nil value:nil icon:nil accessory:PDTAccessorySwitch];
+    cell.toggle.on = !PDTLeftMenuSectionHidden(title);
     cell.toggle.tag = indexPath.row;
     [cell.toggle addTarget:self action:@selector(toggleChanged:) forControlEvents:UIControlEventValueChanged];
     return cell;
@@ -882,24 +890,24 @@ static NSString *PDLeftMenuSummary(void) {
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    return PDSectionHeaderView(@"Sections");
+    return PDTSectionHeaderView(@"Sections");
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 // The only text on this page: what to do while the list is still empty.
 - (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
-    return _sections.count ? nil : PDSectionFooterView(kPDLeftMenuEmpty);
+    return _sections.count ? nil : PDTSectionFooterView(kPDTLeftMenuEmpty);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return _sections.count ? kPDSectionGap : PDFooterHeight(kPDLeftMenuEmpty, tableView.bounds.size.width);
+    return _sections.count ? kPDTSectionGap : PDTFooterHeight(kPDTLeftMenuEmpty, tableView.bounds.size.width);
 }
 @end
 
@@ -907,7 +915,7 @@ static NSString *PDLeftMenuSummary(void) {
 
 // Keywords, Subreddits and Muted users: one section whose header states the rule, with the
 // add field first and the saved entries after it.
-@interface PDListEditorViewController : UITableViewController <UITextFieldDelegate>
+@interface PDTListEditorViewController : UITableViewController <UITextFieldDelegate>
 - (instancetype)initWithTitle:(NSString *)title
                       listKey:(NSString *)listKey
                    enabledKey:(NSString *)enabledKey
@@ -915,7 +923,7 @@ static NSString *PDLeftMenuSummary(void) {
                        header:(NSString *)header;
 @end
 
-@implementation PDListEditorViewController {
+@implementation PDTListEditorViewController {
     NSString *_listKey;
     NSString *_enabledKey;
     NSString *_placeholder;
@@ -946,16 +954,16 @@ static NSString *PDLeftMenuSummary(void) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
-    [self.tableView registerClass:UITableViewCell.class forCellReuseIdentifier:@"PDListFieldCell"];
+    PDTStyleSettingsTable(self.tableView);
+    [self.tableView registerClass:UITableViewCell.class forCellReuseIdentifier:@"PDTListFieldCell"];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
 
     _field = [[UITextField alloc] init];
-    _field.font = PDSettingsFont(17.0, NO);
-    _field.textColor = PDPrimaryColor();
+    _field.font = PDTSettingsFont(17.0, NO);
+    _field.textColor = PDTPrimaryColor();
     _field.attributedPlaceholder =
             [[NSAttributedString alloc] initWithString:_placeholder
-                                            attributes:@{NSForegroundColorAttributeName : PDSecondaryColor()}];
+                                            attributes:@{NSForegroundColorAttributeName : PDTSecondaryColor()}];
     _field.autocapitalizationType = UITextAutocapitalizationTypeNone;
     _field.autocorrectionType = UITextAutocorrectionTypeNo;
     _field.returnKeyType = UIReturnKeyDone;
@@ -967,7 +975,7 @@ static NSString *PDLeftMenuSummary(void) {
     [_addButton setImage:[UIImage systemImageNamed:@"plus.circle.fill"
                                  withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:22.0]]
                 forState:UIControlStateNormal];
-    _addButton.tintColor = PDPrimaryColor();
+    _addButton.tintColor = PDTPrimaryColor();
     _addButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentRight;
     _addButton.accessibilityLabel = @"Add";
     [_addButton addTarget:self action:@selector(addEntries) forControlEvents:UIControlEventTouchUpInside];
@@ -985,7 +993,7 @@ static NSString *PDLeftMenuSummary(void) {
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row == 0) {
-        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDListFieldCell" forIndexPath:indexPath];
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTListFieldCell" forIndexPath:indexPath];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.backgroundColor = UIColor.systemBackgroundColor;
         if (_field.superview != cell.contentView) {
@@ -994,11 +1002,11 @@ static NSString *PDLeftMenuSummary(void) {
             [cell.contentView addSubview:_field];
             [cell.contentView addSubview:_addButton];
             [NSLayoutConstraint activateConstraints:@[
-                [_field.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:kPDPlainTextInset],
+                [_field.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:kPDTPlainTextInset],
                 [_field.centerYAnchor constraintEqualToAnchor:cell.contentView.centerYAnchor],
                 [_field.trailingAnchor constraintEqualToAnchor:_addButton.leadingAnchor constant:-8.0],
                 [_addButton.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor
-                                                            constant:-(kPDSwitchColumnInset - kPDSymbolMargin)],
+                                                            constant:-(kPDTSwitchColumnInset - kPDTSymbolMargin)],
                 [_addButton.centerYAnchor constraintEqualToAnchor:cell.contentView.centerYAnchor],
                 [_addButton.widthAnchor constraintEqualToConstant:44.0],
                 [_addButton.heightAnchor constraintEqualToConstant:44.0],
@@ -1007,14 +1015,14 @@ static NSString *PDLeftMenuSummary(void) {
         return cell;
     }
     NSString *entry = _entries[indexPath.row - 1];
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
-    [cell configureWithTitle:entry subtitle:nil value:nil icon:nil accessory:PDAccessoryNone];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
+    [cell configureWithTitle:entry subtitle:nil value:nil icon:nil accessory:PDTAccessoryNone];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     UIButton *remove = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImageSymbolConfiguration *symbol =
             [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIImageSymbolWeightSemibold];
     [remove setImage:[UIImage systemImageNamed:@"xmark" withConfiguration:symbol] forState:UIControlStateNormal];
-    remove.tintColor = PDSecondaryColor();
+    remove.tintColor = PDTSecondaryColor();
     remove.frame = CGRectMake(0, 0, 44.0, 44.0);
     remove.accessibilityLabel = [@"Remove " stringByAppendingString:entry];
     [remove addTarget:self action:@selector(removeTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -1023,25 +1031,25 @@ static NSString *PDLeftMenuSummary(void) {
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    return PDSectionHeaderView(_header);
+    return PDTSectionHeaderView(_header);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
         trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row == 0) return nil;
-    __weak PDListEditorViewController *weakSelf = self;
+    __weak PDTListEditorViewController *weakSelf = self;
     UIContextualAction *remove =
             [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
                                                     title:@"Remove"
@@ -1097,7 +1105,7 @@ static NSString *PDLeftMenuSummary(void) {
 @end
 
 // A filter list's value on the main page: how many entries it holds.
-static NSString *PDListValue(NSString *listKey) {
+static NSString *PDTListValue(NSString *listKey) {
     NSUInteger count = [NSUserDefaults.standardUserDefaults arrayForKey:listKey].count;
     return count ? [NSString stringWithFormat:@"%lu", (unsigned long)count] : @"None";
 }
@@ -1105,16 +1113,16 @@ static NSString *PDListValue(NSString *listKey) {
 #pragma mark - Launch tab
 
 // Stored index order; Chat opens Inbox until a Chat tab exists.
-static NSString *const kPDLaunchTabNames[5] = {@"Default", @"Home", @"Inbox", @"Chat", @"You"};
+static NSString *const kPDTLaunchTabNames[5] = {@"Default", @"Home", @"Inbox", @"Chat", @"You"};
 
-static NSString *PDLaunchTabName(void) {
+static NSString *PDTLaunchTabName(void) {
     NSInteger index = [NSUserDefaults.standardUserDefaults integerForKey:kPrimeDitLaunchTab];
-    return kPDLaunchTabNames[(index >= 0 && index < 5) ? index : 0];
+    return kPDTLaunchTabNames[(index >= 0 && index < 5) ? index : 0];
 }
 
 #pragma mark - Backup & reset page
 
-static NSArray<NSString *> *PDConfigKeys(void) {
+static NSArray<NSString *> *PDTConfigKeys(void) {
     return @[
         kPrimeDitPromoted, kPrimeDitRecommended, kPrimeDitNSFW, kPrimeDitAwards,
         kPrimeDitScores, kPrimeDitAutoCollapseAutoMod, kPrimeDitRecommendationCarousels,
@@ -1130,7 +1138,7 @@ static NSArray<NSString *> *PDConfigKeys(void) {
       ];
 }
 
-static BOOL PDConfigValueIsValid(NSString *key, id value) {
+static BOOL PDTConfigValueIsValid(NSString *key, id value) {
     if ([key isEqualToString:kPrimeDitKeywords] || [key isEqualToString:kPrimeDitSubreddits] ||
             [key isEqualToString:kPrimeDitMutedUsers] || [key isEqualToString:kPrimeDitLeftMenuHidden]) {
         if (![value isKindOfClass:NSArray.class]) return NO;
@@ -1145,24 +1153,24 @@ static BOOL PDConfigValueIsValid(NSString *key, id value) {
         return [value integerValue] >= -1 && [value integerValue] <= 14;
     if ([key isEqualToString:kPrimeDitLaunchTab]) return [value integerValue] >= 0 && [value integerValue] <= 4;
     if ([key isEqualToString:kPrimeDitAutoClearCache])
-        return [value integerValue] >= 0 && [value integerValue] < PDAutoClearCount;
+        return [value integerValue] >= 0 && [value integerValue] < PDTAutoClearCount;
     return YES;
 }
 
-static NSString *const kPDClearCacheMessage =
+static NSString *const kPDTClearCacheMessage =
         @"Clears cached images, video and feed data. Your login and PrimeDit settings are kept.";
 
 // Auto-clear choices, the current one checked.
-@interface PDAutoClearViewController : UITableViewController
+@interface PDTAutoClearViewController : UITableViewController
 @end
 
-@implementation PDAutoClearViewController
+@implementation PDTAutoClearViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Auto-clear";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
+    PDTStyleSettingsTable(self.tableView);
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -1170,22 +1178,22 @@ static NSString *const kPDClearCacheMessage =
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return PDAutoClearCount;
+    return PDTAutoClearCount;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
     NSInteger current = [NSUserDefaults.standardUserDefaults integerForKey:kPrimeDitAutoClearCache];
-    [cell configureWithTitle:PDAutoClearName(indexPath.row)
+    [cell configureWithTitle:PDTAutoClearName(indexPath.row)
                     subtitle:nil
                        value:nil
                         icon:nil
-                   accessory:(indexPath.row == current ? PDAccessoryCheck : PDAccessoryNone)];
+                   accessory:(indexPath.row == current ? PDTAccessoryCheck : PDTAccessoryNone)];
     return cell;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
@@ -1195,11 +1203,11 @@ static NSString *const kPDClearCacheMessage =
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDSectionGap / 2.0;
+    return kPDTSectionGap / 2.0;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1209,10 +1217,10 @@ static NSString *const kPDClearCacheMessage =
 
 @end
 
-@interface PDBackupViewController : UITableViewController <UIDocumentPickerDelegate>
+@interface PDTBackupViewController : UITableViewController <UIDocumentPickerDelegate>
 @end
 
-@implementation PDBackupViewController {
+@implementation PDTBackupViewController {
     NSString *_cacheSize;
 }
 
@@ -1220,7 +1228,7 @@ static NSString *const kPDClearCacheMessage =
     [super viewDidLoad];
     self.title = @"Backup & reset";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
+    PDTStyleSettingsTable(self.tableView);
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1231,11 +1239,11 @@ static NSString *const kPDClearCacheMessage =
 
 // The size is measured off the main thread, then shown on the Clear cache row.
 - (void)refreshCacheSize {
-    __weak PDBackupViewController *weakSelf = self;
+    __weak PDTBackupViewController *weakSelf = self;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *size = PDFormattedSize(PDRedditCacheSize());
+        NSString *size = PDTFormattedSize(PDTRedditCacheSize());
         dispatch_async(dispatch_get_main_queue(), ^{
-            PDBackupViewController *strongSelf = weakSelf;
+            PDTBackupViewController *strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf->_cacheSize = size;
             [strongSelf.tableView reloadRowsAtIndexPaths:@[ [NSIndexPath indexPathForRow:0 inSection:1] ]
@@ -1254,7 +1262,7 @@ static NSString *const kPDClearCacheMessage =
 
 // Backup: import, export. Cache: clear with its size, auto-clear. Reset: defaults, in red.
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
     NSInteger item = indexPath.section * 2 + indexPath.row;
     NSString *const titles[5] = {@"Import settings", @"Export settings", @"Clear cache", @"Auto-clear",
                                  @"Reset to defaults"};
@@ -1262,42 +1270,42 @@ static NSString *const kPDClearCacheMessage =
     NSString *value = nil;
     if (item == 2) value = _cacheSize;
     if (item == 3)
-        value = PDAutoClearName([NSUserDefaults.standardUserDefaults integerForKey:kPrimeDitAutoClearCache]);
+        value = PDTAutoClearName([NSUserDefaults.standardUserDefaults integerForKey:kPrimeDitAutoClearCache]);
     [cell configureWithTitle:titles[item]
                     subtitle:nil
                        value:value
-                        icon:PDRowIcon(@[ icons[item] ])
-                   accessory:(item == 3 ? PDAccessoryChevron : PDAccessoryNone)];
-    if (item == 4) [cell setTitleColor:PDDestructiveColor()];
+                        icon:PDTRowIcon(@[ icons[item] ])
+                   accessory:(item == 3 ? PDTAccessoryChevron : PDTAccessoryNone)];
+    if (item == 4) [cell setTitleColor:PDTDestructiveColor()];
     return cell;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    if (section != 1) return PDSectionHeaderView(section == 0 ? @"Backup" : @"Reset");
-    __weak PDBackupViewController *weakSelf = self;
-    return PDSectionHeaderViewWithInfo(@"Cache", kPDChevronColumnInset, ^{
-        PDBackupViewController *strongSelf = weakSelf;
+    if (section != 1) return PDTSectionHeaderView(section == 0 ? @"Backup" : @"Reset");
+    __weak PDTBackupViewController *weakSelf = self;
+    return PDTSectionHeaderViewWithInfo(@"Cache", kPDTChevronColumnInset, ^{
+        PDTBackupViewController *strongSelf = weakSelf;
         if (!strongSelf) return;
-        PDPresentHelpSheet(strongSelf, @"Cache", @[
-            PDHelp(@"Clear cache",
-                   @"Deletes the images, videos and feed data Reddit keeps on the phone; your login and settings stay.",
-                   PDRowIcon(@[ @"rpl3/delete" ])),
-            PDHelp(@"Auto-clear", @"Clears the cache when Reddit starts, at the interval you pick.",
-                   PDRowIcon(@[ @"rpl3/clock" ])),
+        PDTPresentHelpSheet(strongSelf, @"Cache", @[
+            PDTHelp(@"Clear cache",
+                    @"Deletes the images, videos and feed data Reddit keeps on the phone; your login and settings stay.",
+                    PDTRowIcon(@[ @"rpl3/delete" ])),
+            PDTHelp(@"Auto-clear", @"Clears the cache when Reddit starts, at the interval you pick.",
+                    PDTRowIcon(@[ @"rpl3/clock" ])),
           ]);
     });
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1308,7 +1316,7 @@ static NSString *const kPDClearCacheMessage =
         case 2: [self confirmClearCache]; break;
         case 3:
             [self.navigationController
-                    pushViewController:[[PDAutoClearViewController alloc] initWithStyle:UITableViewStyleGrouped]
+                    pushViewController:[[PDTAutoClearViewController alloc] initWithStyle:UITableViewStyleGrouped]
                               animated:YES];
             break;
         default: [self confirmReset]; break;
@@ -1329,33 +1337,33 @@ static NSString *const kPDClearCacheMessage =
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     NSData *data = urls.firstObject ? [NSData dataWithContentsOfURL:urls.firstObject] : nil;
     if (data.length == 0 || data.length > 1024 * 1024) {
-        PDPresentAlert(self, @"Import failed", @"Choose a settings file of 1 MB or less.");
+        PDTPresentAlert(self, @"Import failed", @"Choose a settings file of 1 MB or less.");
         return;
     }
     id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     if (![json isKindOfClass:NSDictionary.class]) {
-        PDPresentAlert(self, @"Import failed", @"This file is not a PrimeDit settings file.");
+        PDTPresentAlert(self, @"Import failed", @"This file is not a PrimeDit settings file.");
         return;
     }
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSUInteger applied = 0;
-    for (NSString *key in PDConfigKeys()) {
+    for (NSString *key in PDTConfigKeys()) {
         id value = ((NSDictionary *)json)[key];
-        if (value && PDConfigValueIsValid(key, value)) {
+        if (value && PDTConfigValueIsValid(key, value)) {
             [defaults setObject:value forKey:key];
             applied++;
         }
     }
     postPrefsUpdatedNotification();
-    PDCOMPAT_ACTION(PDCompatBackup, @"Imported %lu settings", (unsigned long)applied);
-    PDPresentAlert(self, @"Settings imported",
-                   [NSString stringWithFormat:@"%lu settings applied.", (unsigned long)applied]);
+    PDTCOMPAT_ACTION(PDTCompatBackup, @"Imported %lu settings", (unsigned long)applied);
+    PDTPresentAlert(self, @"Settings imported",
+                    [NSString stringWithFormat:@"%lu settings applied.", (unsigned long)applied]);
 }
 
 - (void)exportSettings {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     NSMutableDictionary *config = [NSMutableDictionary dictionary];
-    for (NSString *key in PDConfigKeys()) {
+    for (NSString *key in PDTConfigKeys()) {
         id value = [defaults objectForKey:key];
         if (value) config[key] = value;
     }
@@ -1371,10 +1379,10 @@ static NSString *const kPDClearCacheMessage =
                                                                  error:nil] &&
                    [data writeToFile:path atomically:YES];
     if (!written) {
-        PDPresentAlert(self, @"Export failed", @"The settings file could not be written.");
+        PDTPresentAlert(self, @"Export failed", @"The settings file could not be written.");
         return;
     }
-    PDCOMPAT_ACTION(PDCompatBackup, @"Exported %lu settings", (unsigned long)config.count);
+    PDTCOMPAT_ACTION(PDTCompatBackup, @"Exported %lu settings", (unsigned long)config.count);
     UIActivityViewController *share =
             [[UIActivityViewController alloc] initWithActivityItems:@[ [NSURL fileURLWithPath:path] ]
                                               applicationActivities:nil];
@@ -1393,37 +1401,37 @@ static NSString *const kPDClearCacheMessage =
                                                 message:@"Restore every PrimeDit option to its default?"
                                          preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    __weak PDBackupViewController *weakSelf = self;
+    __weak PDTBackupViewController *weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Reset"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        for (NSString *key in PDConfigKeys()) [defaults removeObjectForKey:key];
+        for (NSString *key in PDTConfigKeys()) [defaults removeObjectForKey:key];
         [defaults setBool:YES forKey:kPrimeDitPromoted];
         postPrefsUpdatedNotification();
-        PDCOMPAT_ACTION(PDCompatBackup, @"Reset to defaults");
-        if (weakSelf) PDPresentAlert(weakSelf, @"Settings reset", @"Every option is back to its default.");
+        PDTCOMPAT_ACTION(PDTCompatBackup, @"Reset to defaults");
+        if (weakSelf) PDTPresentAlert(weakSelf, @"Settings reset", @"Every option is back to its default.");
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)confirmClearCache {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Clear cache"
-                                                                   message:kPDClearCacheMessage
+                                                                   message:kPDTClearCacheMessage
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    __weak PDBackupViewController *weakSelf = self;
+    __weak PDTBackupViewController *weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Clear"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            PDClearRedditCache();
+            PDTClearRedditCache();
             dispatch_async(dispatch_get_main_queue(), ^{
-                PDCOMPAT_ACTION(PDCompatBackup, @"Cache cleared");
-                PDBackupViewController *strongSelf = weakSelf;
+                PDTCOMPAT_ACTION(PDTCompatBackup, @"Cache cleared");
+                PDTBackupViewController *strongSelf = weakSelf;
                 if (!strongSelf) return;
                 [strongSelf refreshCacheSize];
-                PDPresentAlert(strongSelf, @"Cache cleared", nil);
+                PDTPresentAlert(strongSelf, @"Cache cleared", nil);
             });
         });
     }]];
@@ -1435,45 +1443,45 @@ static NSString *const kPDClearCacheMessage =
 #pragma mark - Compatibility pages
 
 // SF Symbols at 18 pt read the same size as Reddit's 20 pt asset icons.
-static const CGFloat kPDSymbolSize = 18.0;
+static const CGFloat kPDTSymbolSize = 18.0;
 
-static UIImage *PDSymbol(NSString *name) {
+static UIImage *PDTSymbol(NSString *name) {
     UIImageSymbolConfiguration *config =
-            [UIImageSymbolConfiguration configurationWithPointSize:kPDSymbolSize weight:UIImageSymbolWeightMedium];
+            [UIImageSymbolConfiguration configurationWithPointSize:kPDTSymbolSize weight:UIImageSymbolWeightMedium];
     return [UIImage systemImageNamed:name withConfiguration:config];
 }
 
-static UIImage *PDVerdictSymbol(PDCompatVerdict verdict) {
+static UIImage *PDTVerdictSymbol(PDTCompatVerdict verdict) {
     switch (verdict) {
-        case PDCompatVerdictWorking: return PDSymbol(@"checkmark.circle");
-        case PDCompatVerdictBroken: return PDSymbol(@"xmark.circle");
-        case PDCompatVerdictNotSeen: return PDSymbol(@"circle.dashed");
-        default: return PDSymbol(@"minus.circle");
+        case PDTCompatVerdictWorking: return PDTSymbol(@"checkmark.circle");
+        case PDTCompatVerdictBroken: return PDTSymbol(@"xmark.circle");
+        case PDTCompatVerdictNotSeen: return PDTSymbol(@"circle.dashed");
+        default: return PDTSymbol(@"minus.circle");
     }
 }
 
-static UIColor *PDVerdictColor(PDCompatVerdict verdict) {
+static UIColor *PDTVerdictColor(PDTCompatVerdict verdict) {
     switch (verdict) {
-        case PDCompatVerdictWorking: return UIColor.systemGreenColor;
-        case PDCompatVerdictBroken: return UIColor.systemRedColor;
+        case PDTCompatVerdictWorking: return UIColor.systemGreenColor;
+        case PDTCompatVerdictBroken: return UIColor.systemRedColor;
         default: return UIColor.tertiaryLabelColor;
     }
 }
 
-static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
+static NSInteger PDTBrokenCount(NSArray<PDTCompatResult *> *results) {
     NSInteger broken = 0;
-    for (PDCompatResult *result in results)
-        if (result.verdict == PDCompatVerdictBroken) broken++;
+    for (PDTCompatResult *result in results)
+        if (result.verdict == PDTCompatVerdictBroken) broken++;
     return broken;
 }
 
 // Report row: verdict symbol in the icon column, the name, then what was recorded
 // on as many lines as it takes; a button copies an address when there is one.
-@interface PDReportCell : UITableViewCell
-- (void)configureWithResult:(PDCompatResult *)result;
+@interface PDTReportCell : UITableViewCell
+- (void)configureWithResult:(PDTCompatResult *)result;
 @end
 
-@implementation PDReportCell {
+@implementation PDTReportCell {
     UIImageView *_iconView;
     UILabel *_titleLabel;
     UILabel *_detailLabel;
@@ -1495,10 +1503,10 @@ static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
     _iconView.translatesAutoresizingMaskIntoConstraints = NO;
 
     _titleLabel = [[UILabel alloc] init];
-    _titleLabel.font = PDSettingsFont(17.0, NO);
+    _titleLabel.font = PDTSettingsFont(17.0, NO);
     _titleLabel.numberOfLines = 0;
     _detailLabel = [[UILabel alloc] init];
-    _detailLabel.font = PDSettingsFont(12.0, NO);
+    _detailLabel.font = PDTSettingsFont(12.0, NO);
     _detailLabel.numberOfLines = 0;
     UIStackView *text = [[UIStackView alloc] initWithArrangedSubviews:@[ _titleLabel, _detailLabel ]];
     text.axis = UILayoutConstraintAxisVertical;
@@ -1508,11 +1516,11 @@ static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
     UIButtonConfiguration *config = [UIButtonConfiguration grayButtonConfiguration];
     config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
     config.buttonSize = UIButtonConfigurationSizeSmall;
-    config.baseForegroundColor = PDPrimaryColor();
+    config.baseForegroundColor = PDTPrimaryColor();
     config.titleTextAttributesTransformer =
             ^NSDictionary<NSAttributedStringKey, id> *(NSDictionary<NSAttributedStringKey, id> *attributes) {
                 NSMutableDictionary<NSAttributedStringKey, id> *updated = [attributes mutableCopy];
-                updated[NSFontAttributeName] = PDSettingsFont(13.0, YES);
+                updated[NSFontAttributeName] = PDTSettingsFont(13.0, YES);
                 return updated;
             };
     _button = [UIButton buttonWithConfiguration:config primaryAction:nil];
@@ -1524,35 +1532,35 @@ static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
     [content addSubview:_iconView];
     [content addSubview:text];
     [content addSubview:_button];
-    NSLayoutConstraint *minHeight = [content.heightAnchor constraintGreaterThanOrEqualToConstant:kPDRowHeight];
+    NSLayoutConstraint *minHeight = [content.heightAnchor constraintGreaterThanOrEqualToConstant:kPDTRowHeight];
     minHeight.priority = UILayoutPriorityRequired - 1;
     _textToButton = [text.trailingAnchor constraintLessThanOrEqualToAnchor:_button.leadingAnchor constant:-12.0];
     _textToEdge = [text.trailingAnchor constraintLessThanOrEqualToAnchor:content.trailingAnchor constant:-20.0];
     [NSLayoutConstraint activateConstraints:@[
         minHeight,
         _textToEdge,
-        [_iconView.centerXAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDIconCenterX],
+        [_iconView.centerXAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDTIconCenterX],
         [_iconView.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
         [_iconView.widthAnchor constraintEqualToConstant:24.0],
         [_iconView.heightAnchor constraintEqualToConstant:24.0],
-        [text.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDTextInset],
+        [text.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDTTextInset],
         [text.topAnchor constraintGreaterThanOrEqualToAnchor:content.topAnchor constant:11.0],
         [text.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor constant:-11.0],
         [text.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
-        [_button.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-kPDChevronColumnInset],
+        [_button.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-kPDTChevronColumnInset],
         [_button.centerYAnchor constraintEqualToAnchor:content.centerYAnchor],
       ]];
     return self;
 }
 
-- (void)configureWithResult:(PDCompatResult *)result {
-    _iconView.image = PDVerdictSymbol(result.verdict);
-    _iconView.tintColor = PDVerdictColor(result.verdict);
+- (void)configureWithResult:(PDTCompatResult *)result {
+    _iconView.image = PDTVerdictSymbol(result.verdict);
+    _iconView.tintColor = PDTVerdictColor(result.verdict);
     _titleLabel.text = result.title;
-    _titleLabel.textColor = result.verdict == PDCompatVerdictOff ? PDSecondaryColor() : PDPrimaryColor();
+    _titleLabel.textColor = result.verdict == PDTCompatVerdictOff ? PDTSecondaryColor() : PDTPrimaryColor();
     _detailLabel.text = result.detail;
     _detailLabel.hidden = result.detail.length == 0;
-    _detailLabel.textColor = result.verdict == PDCompatVerdictBroken ? UIColor.systemRedColor : PDSecondaryColor();
+    _detailLabel.textColor = result.verdict == PDTCompatVerdictBroken ? UIColor.systemRedColor : PDTSecondaryColor();
     _clipboardText = [result.clipboardText copy];
     _clipboardTitle = [result.clipboardTitle copy];
     BOOL copyable = _clipboardText.length > 0;
@@ -1573,23 +1581,23 @@ static NSInteger PDBrokenCount(NSArray<PDCompatResult *> *results) {
     UIPasteboard.generalPasteboard.string = _clipboardText;
     NSString *title = _clipboardTitle;
     [self setButtonTitle:@"Copied"];
-    __weak PDReportCell *weakSelf = self;
+    __weak PDTReportCell *weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        PDReportCell *cell = weakSelf;
+        PDTReportCell *cell = weakSelf;
         if (cell && [cell->_clipboardTitle isEqualToString:title]) [cell setButtonTitle:title];
     });
 }
 @end
 
-static UIView *PDReportCount(NSInteger count, NSString *label, UIColor *color) {
+static UIView *PDTReportCount(NSInteger count, NSString *label, UIColor *color) {
     UILabel *number = [[UILabel alloc] init];
-    number.font = PDSettingsFont(20.0, YES);
+    number.font = PDTSettingsFont(20.0, YES);
     number.textColor = color;
     number.textAlignment = NSTextAlignmentCenter;
     number.text = [NSString stringWithFormat:@"%ld", (long)count];
     UILabel *caption = [[UILabel alloc] init];
-    caption.font = PDSettingsFont(11.0, NO);
-    caption.textColor = PDSecondaryColor();
+    caption.font = PDTSettingsFont(11.0, NO);
+    caption.textColor = PDTSecondaryColor();
     caption.textAlignment = NSTextAlignmentCenter;
     caption.text = label;
     UIView *tile = [[UIView alloc] init];
@@ -1614,11 +1622,11 @@ static UIView *PDReportCount(NSInteger count, NSString *label, UIColor *color) {
 }
 
 // Report summary: a centered verdict disc, headline and recording line, then one tile per verdict.
-static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
+static UIView *PDTReportSummaryView(NSArray<PDTCompatResult *> *results) {
     NSInteger counts[4] = {0, 0, 0, 0};
-    for (PDCompatResult *result in results)
-        if (result.verdict >= PDCompatVerdictOff && result.verdict <= PDCompatVerdictBroken) counts[result.verdict]++;
-    NSInteger broken = counts[PDCompatVerdictBroken];
+    for (PDTCompatResult *result in results)
+        if (result.verdict >= PDTCompatVerdictOff && result.verdict <= PDTCompatVerdictBroken) counts[result.verdict]++;
+    NSInteger broken = counts[PDTCompatVerdictBroken];
     NSString *version = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"";
     UIColor *tone = broken ? UIColor.systemRedColor : UIColor.systemGreenColor;
 
@@ -1636,26 +1644,26 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
     [disc addSubview:mark];
 
     UILabel *headline = [[UILabel alloc] init];
-    headline.font = PDSettingsFont(17.0, YES);
-    headline.textColor = PDPrimaryColor();
+    headline.font = PDTSettingsFont(17.0, YES);
+    headline.textColor = PDTPrimaryColor();
     headline.textAlignment = NSTextAlignmentCenter;
     headline.numberOfLines = 0;
     headline.text = broken ? [NSString stringWithFormat:@"%ld problem%@ with Reddit %@", (long)broken,
                                                         broken == 1 ? @"" : @"s", version]
                            : [NSString stringWithFormat:@"Compatible with Reddit %@", version];
     UILabel *subline = [[UILabel alloc] init];
-    subline.font = PDSettingsFont(12.0, NO);
-    subline.textColor = PDSecondaryColor();
+    subline.font = PDTSettingsFont(12.0, NO);
+    subline.textColor = PDTSecondaryColor();
     subline.textAlignment = NSTextAlignmentCenter;
     subline.numberOfLines = 0;
     subline.text = [NSString stringWithFormat:@"iOS %@ \u00b7 %@", UIDevice.currentDevice.systemVersion,
-                                              PDCompatRecordingText()];
+                                              PDTCompatRecordingText()];
 
     UIStackView *tiles = [[UIStackView alloc] initWithArrangedSubviews:@[
-        PDReportCount(broken, @"Broken", broken ? UIColor.systemRedColor : PDSecondaryColor()),
-        PDReportCount(counts[PDCompatVerdictWorking], @"Working", UIColor.systemGreenColor),
-        PDReportCount(counts[PDCompatVerdictNotSeen], @"Not seen", PDPrimaryColor()),
-        PDReportCount(counts[PDCompatVerdictOff], @"Off", UIColor.tertiaryLabelColor),
+        PDTReportCount(broken, @"Broken", broken ? UIColor.systemRedColor : PDTSecondaryColor()),
+        PDTReportCount(counts[PDTCompatVerdictWorking], @"Working", UIColor.systemGreenColor),
+        PDTReportCount(counts[PDTCompatVerdictNotSeen], @"Not seen", PDTPrimaryColor()),
+        PDTReportCount(counts[PDTCompatVerdictOff], @"Off", UIColor.tertiaryLabelColor),
       ]];
     tiles.distribution = UIStackViewDistributionFillEqually;
     tiles.spacing = 8.0;
@@ -1679,8 +1687,8 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
         [subline.widthAnchor constraintEqualToAnchor:all.widthAnchor],
         [tiles.widthAnchor constraintEqualToAnchor:all.widthAnchor],
         [all.topAnchor constraintEqualToAnchor:container.topAnchor constant:16.0],
-        [all.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:kPDPlainTextInset],
-        [all.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-kPDPlainTextInset],
+        [all.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:kPDTPlainTextInset],
+        [all.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-kPDTPlainTextInset],
         [all.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-12.0],
       ]];
     return container;
@@ -1688,18 +1696,18 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 
 // Report: summary, one section per settings section, then Reddit data; Start over,
 // under Session, clears the session and the address counters.
-@implementation PDCompatibilityReportViewController {
+@implementation PDTCompatibilityReportViewController {
     NSArray<NSString *> *_sections;
-    NSArray<NSArray<PDCompatResult *> *> *_rows;
+    NSArray<NSArray<PDTCompatResult *> *> *_rows;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Report";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
-    [self.tableView registerClass:PDReportCell.class forCellReuseIdentifier:@"PDReportCell"];
-    self.tableView.estimatedRowHeight = kPDRowHeightWithSubtitle;
+    PDTStyleSettingsTable(self.tableView);
+    [self.tableView registerClass:PDTReportCell.class forCellReuseIdentifier:@"PDTReportCell"];
+    self.tableView.estimatedRowHeight = kPDTRowHeightWithSubtitle;
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Copy"
                                                                               style:UIBarButtonItemStylePlain
                                                                              target:self
@@ -1722,10 +1730,10 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 }
 
 - (void)reloadReport {
-    NSArray<PDCompatResult *> *results = PDCompatResults();
+    NSArray<PDTCompatResult *> *results = PDTCompatResults();
     NSMutableArray<NSString *> *sections = [NSMutableArray array];
-    NSMutableArray<NSMutableArray<PDCompatResult *> *> *rows = [NSMutableArray array];
-    for (PDCompatResult *result in results) {
+    NSMutableArray<NSMutableArray<PDTCompatResult *> *> *rows = [NSMutableArray array];
+    for (PDTCompatResult *result in results) {
         if (![sections.lastObject isEqualToString:result.section]) {
             [sections addObject:result.section];
             [rows addObject:[NSMutableArray array]];
@@ -1734,7 +1742,7 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
     }
     _sections = sections;
     _rows = rows;
-    self.tableView.tableHeaderView = PDReportSummaryView(results);
+    self.tableView.tableHeaderView = PDTReportSummaryView(results);
     [self sizeSummary];
     [self.tableView reloadData];
 }
@@ -1762,34 +1770,34 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section >= (NSInteger)_sections.count) {
-        PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+        PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
         [cell configureWithTitle:@"Start over"
                         subtitle:nil
                            value:nil
-                            icon:PDRowIcon(@[ @"rpl3/refresh" ])
-                       accessory:PDAccessoryNone];
-        [cell setTitleColor:PDDestructiveColor()];
+                            icon:PDTRowIcon(@[ @"rpl3/refresh" ])
+                       accessory:PDTAccessoryNone];
+        [cell setTitleColor:PDTDestructiveColor()];
         return cell;
     }
-    PDReportCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDReportCell" forIndexPath:indexPath];
+    PDTReportCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTReportCell" forIndexPath:indexPath];
     [cell configureWithResult:_rows[indexPath.section][indexPath.row]];
     return cell;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return indexPath.section < (NSInteger)_sections.count ? UITableViewAutomaticDimension : kPDRowHeight;
+    return indexPath.section < (NSInteger)_sections.count ? UITableViewAutomaticDimension : kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    return PDSectionHeaderView(section < (NSInteger)_sections.count ? _sections[section] : @"Session");
+    return PDTSectionHeaderView(section < (NSInteger)_sections.count ? _sections[section] : @"Session");
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1803,19 +1811,19 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
                                                 message:@"Clears what this session recorded. Your settings are kept."
                                          preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    __weak PDCompatibilityReportViewController *weakSelf = self;
+    __weak PDTCompatibilityReportViewController *weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Start over"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
-                                                PDCompatReset();
-                                                [[PDDataPathTracker shared] reset];
+                                                PDTCompatReset();
+                                                [[PDTDataPathTracker shared] reset];
                                                 [weakSelf reloadReport];
                                             }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)putReportOnClipboard {
-    UIPasteboard.generalPasteboard.string = PDCompatReportText();
+    UIPasteboard.generalPasteboard.string = PDTCompatReportText();
     UIBarButtonItem *button = self.navigationItem.rightBarButtonItem;
     button.title = @"Copied";
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -1829,16 +1837,16 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 @end
 
 // Compatibility: record while using Reddit, then read the report.
-@interface PDCompatibilityViewController : UITableViewController
+@interface PDTCompatibilityViewController : UITableViewController
 @end
 
-@implementation PDCompatibilityViewController
+@implementation PDTCompatibilityViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Compatibility";
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
+    PDTStyleSettingsTable(self.tableView);
     if (self.navigationController.viewControllers.count <= 1)
         self.navigationItem.rightBarButtonItem =
                 [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
@@ -1860,71 +1868,71 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
     if (indexPath.row == 0) {
         [cell configureWithTitle:@"Record activity"
                         subtitle:nil
                            value:nil
-                            icon:PDSymbol(@"stethoscope")
-                       accessory:PDAccessorySwitch];
-        cell.toggle.on = PDCompatActive;
+                            icon:PDTSymbol(@"stethoscope")
+                       accessory:PDTAccessorySwitch];
+        cell.toggle.on = PDTCompatActive;
         [cell.toggle addTarget:self action:@selector(toggleRecording:) forControlEvents:UIControlEventValueChanged];
         return cell;
     }
     // Problems first, then whether recording is on.
-    NSInteger broken = PDBrokenCount(PDCompatResults());
+    NSInteger broken = PDTBrokenCount(PDTCompatResults());
     NSString *status = broken ? [NSString stringWithFormat:@"%ld broken", (long)broken]
-                              : PDCompatActive ? @"Compatible"
+                              : PDTCompatActive ? @"Compatible"
                                            : @"Not recording";
     [cell configureWithTitle:@"Report"
                     subtitle:nil
                        value:status
-                        icon:PDSymbol(@"list.bullet.rectangle")
-                   accessory:PDAccessoryChevron];
-    [cell setValueColor:broken ? UIColor.systemRedColor : PDCompatActive ? UIColor.systemGreenColor : PDSecondaryColor()];
+                        icon:PDTSymbol(@"list.bullet.rectangle")
+                   accessory:PDTAccessoryChevron];
+    [cell setValueColor:broken ? UIColor.systemRedColor : PDTCompatActive ? UIColor.systemGreenColor : PDTSecondaryColor()];
     return cell;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return kPDRowHeight;
+    return kPDTRowHeight;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    __weak PDCompatibilityViewController *weakSelf = self;
-    return PDSectionHeaderViewWithInfo(@"Session", kPDSwitchColumnInset, ^{
+    __weak PDTCompatibilityViewController *weakSelf = self;
+    return PDTSectionHeaderViewWithInfo(@"Session", kPDTSwitchColumnInset, ^{
         [weakSelf showHelp];
     });
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return kPDTSectionGap;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row != 1) return;
     [self.navigationController
-            pushViewController:[[PDCompatibilityReportViewController alloc] initWithStyle:UITableViewStyleGrouped]
+            pushViewController:[[PDTCompatibilityReportViewController alloc] initWithStyle:UITableViewStyleGrouped]
                       animated:YES];
 }
 
 - (void)toggleRecording:(UISwitch *)sender {
-    PDCompatSetRecording(sender.on);
+    PDTCompatSetRecording(sender.on);
     [self.tableView reloadRowsAtIndexPaths:@[ [NSIndexPath indexPathForRow:1 inSection:0] ]
                           withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)showHelp {
-    PDPresentHelpSheet(self, @"Session", @[
-        PDHelp(@"Record activity",
-               @"Watches what every option does while you use Reddit. The stethoscope opens the report anytime.",
-               PDSymbol(@"stethoscope")),
-        PDHelp(@"Report", @"Every option and every Reddit data address, marked Broken, Working, Not seen or Off.",
-               PDSymbol(@"list.bullet.rectangle")),
+    PDTPresentHelpSheet(self, @"Session", @[
+        PDTHelp(@"Record activity",
+                @"Watches what every option does while you use Reddit. The stethoscope opens the report anytime.",
+                PDTSymbol(@"stethoscope")),
+        PDTHelp(@"Report", @"Every option and every Reddit data address, marked Broken, Working, Not seen or Off.",
+                PDTSymbol(@"list.bullet.rectangle")),
       ]);
 }
 
@@ -1936,7 +1944,7 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 
 #pragma mark - Main settings page
 
-@interface PDRow : NSObject
+@interface PDTRow : NSObject
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *subtitle;
 @property(nonatomic, copy) NSString *value;
@@ -1947,14 +1955,14 @@ static UIView *PDReportSummaryView(NSArray<PDCompatResult *> *results) {
 @property(nonatomic) SEL action;
 @end
 
-@implementation PDRow
+@implementation PDTRow
 @end
 
 // Filter rows read ON = shown and store the inverse ("hide"); behavior rows
 // store what the switch shows. `fallback` is the stored value when unset.
-static PDRow *PDToggleRow(NSString *title, NSString *subtitle, NSArray<NSString *> *icons, NSString *key,
-                          BOOL shownWhenOn, BOOL fallback) {
-    PDRow *row = [[PDRow alloc] init];
+static PDTRow *PDTToggleRow(NSString *title, NSString *subtitle, NSArray<NSString *> *icons, NSString *key,
+                            BOOL shownWhenOn, BOOL fallback) {
+    PDTRow *row = [[PDTRow alloc] init];
     row.title = title;
     row.subtitle = subtitle;
     row.icons = icons;
@@ -1964,9 +1972,9 @@ static PDRow *PDToggleRow(NSString *title, NSString *subtitle, NSArray<NSString 
     return row;
 }
 
-static PDRow *PDLinkRow(NSString *title, NSString *subtitle, NSString *value, NSArray<NSString *> *icons,
-                        SEL action) {
-    PDRow *row = [[PDRow alloc] init];
+static PDTRow *PDTLinkRow(NSString *title, NSString *subtitle, NSString *value, NSArray<NSString *> *icons,
+                          SEL action) {
+    PDTRow *row = [[PDTRow alloc] init];
     row.title = title;
     row.subtitle = subtitle;
     row.value = value;
@@ -1975,19 +1983,19 @@ static PDRow *PDLinkRow(NSString *title, NSString *subtitle, NSString *value, NS
     return row;
 }
 
-static BOOL PDRowIsOn(PDRow *row) {
-    BOOL stored = PDPrefBool(row.key, row.fallback);
+static BOOL PDTRowIsOn(PDTRow *row) {
+    BOOL stored = PDTPrefBool(row.key, row.fallback);
     return row.shownWhenOn ? !stored : stored;
 }
 
-static char kPDSectionsKey;
+static char kPDTSectionsKey;
 
 // A %new method reached through [self ...] needs a visible declaration; this
 // category provides them.
-@interface PDSettingsViewController (PDNative)
+@interface PDTSettingsViewController (PDTNative)
 - (NSArray *)pdSections;
 - (void)pdRebuildSections;
-- (PDRow *)pdRowAtIndexPath:(NSIndexPath *)indexPath;
+- (PDTRow *)pdRowAtIndexPath:(NSIndexPath *)indexPath;
 - (void)pdToggleChanged:(UISwitch *)sender;
 - (void)pdPushController:(UIViewController *)controller;
 - (void)pdShowHelpForSection:(NSInteger)section;
@@ -2003,29 +2011,29 @@ static char kPDSectionsKey;
 
 // Titles: a noun where the switch shows something, a verb where it makes something
 // happen. Help names a row by its key and adds one sentence for the info sheet.
-static NSArray *PDBuildMainSections(void) {
+static NSArray *PDTBuildMainSections(void) {
     NSMutableArray *tools = [NSMutableArray
-            arrayWithObject:PDLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
-                                      @selector(pdOpenBackup))];
+            arrayWithObject:PDTLinkRow(@"Backup & reset", nil, nil, @[ @"rpl3/backup", @"rpl3/archive" ],
+                                       @selector(pdOpenBackup))];
 #if PRIMEDIT_DEBUG
-    [tools addObject:PDLinkRow(@"Compatibility", nil, nil, @[ @"rpl3/verified" ], @selector(pdOpenCompatibility))];
+    [tools addObject:PDTLinkRow(@"Compatibility", nil, nil, @[ @"rpl3/verified" ], @selector(pdOpenCompatibility))];
 #endif
-    [tools addObject:PDToggleRow(@"FLEX explorer", nil, @[ @"rpl3/bug" ], kPrimeDitFlexExplorer, NO, NO)];
+    [tools addObject:PDTToggleRow(@"FLEX explorer", nil, @[ @"rpl3/bug" ], kPrimeDitFlexExplorer, NO, NO)];
     return @[
         @{
             @"title" : @"Feed",
             @"rows" : @[
-                PDToggleRow(@"Promoted", nil, @[ @"rpl3/ad" ], kPrimeDitPromoted, YES, YES),
-                PDToggleRow(@"Recommended", nil, @[ @"rpl3/star" ], kPrimeDitRecommended, YES, NO),
-                PDToggleRow(@"Community recommendations", nil, @[ @"rpl3/communities" ],
-                            kPrimeDitRecommendationCarousels, YES, NO),
-                PDToggleRow(@"Suggestion cards", nil, @[ @"rpl3/card" ], kPrimeDitExtraFeedCards, YES, NO),
-                PDToggleRow(@"AI answers & summaries", nil, @[ @"rpl3/answers", @"rpl3/ai" ], kPrimeDitAIBoxes, YES,
-                            NO),
-                PDToggleRow(@"NSFW", nil, @[ @"rpl3/nsfw" ], kPrimeDitNSFW, YES, NO),
-                PDToggleRow(@"Spoilers", nil, @[ @"rpl3/hide", @"rpl3/caution" ], kPrimeDitSpoilers, YES, NO),
-                PDToggleRow(@"Visited posts", nil, @[ @"rpl3/show", @"rpl3/clock" ], kPrimeDitHideVisitedPosts, YES,
-                            NO),
+                PDTToggleRow(@"Promoted", nil, @[ @"rpl3/ad" ], kPrimeDitPromoted, YES, YES),
+                PDTToggleRow(@"Recommended", nil, @[ @"rpl3/star" ], kPrimeDitRecommended, YES, NO),
+                PDTToggleRow(@"Community recommendations", nil, @[ @"rpl3/communities" ],
+                             kPrimeDitRecommendationCarousels, YES, NO),
+                PDTToggleRow(@"Suggestion cards", nil, @[ @"rpl3/card" ], kPrimeDitExtraFeedCards, YES, NO),
+                PDTToggleRow(@"AI answers & summaries", nil, @[ @"rpl3/answers", @"rpl3/ai" ], kPrimeDitAIBoxes, YES,
+                             NO),
+                PDTToggleRow(@"NSFW", nil, @[ @"rpl3/nsfw" ], kPrimeDitNSFW, YES, NO),
+                PDTToggleRow(@"Spoilers", nil, @[ @"rpl3/hide", @"rpl3/caution" ], kPrimeDitSpoilers, YES, NO),
+                PDTToggleRow(@"Visited posts", nil, @[ @"rpl3/show", @"rpl3/clock" ], kPrimeDitHideVisitedPosts, YES,
+                             NO),
               ],
             @"help" : @[
                 @[
@@ -2043,30 +2051,30 @@ static NSArray *PDBuildMainSections(void) {
         @{
             @"title" : @"Filter lists",
             @"rows" : @[
-                PDLinkRow(@"Keywords", nil, PDListValue(kPrimeDitKeywords), @[ @"rpl3/keyword" ],
-                          @selector(pdEditKeywords)),
-                PDLinkRow(@"Subreddits", nil, PDListValue(kPrimeDitSubreddits), @[ @"rpl3/community" ],
-                          @selector(pdEditSubreddits)),
-                PDLinkRow(@"Muted users", nil, PDListValue(kPrimeDitMutedUsers), @[ @"rpl3/block" ],
-                          @selector(pdEditMutedUsers)),
+                PDTLinkRow(@"Keywords", nil, PDTListValue(kPrimeDitKeywords), @[ @"rpl3/keyword" ],
+                           @selector(pdEditKeywords)),
+                PDTLinkRow(@"Subreddits", nil, PDTListValue(kPrimeDitSubreddits), @[ @"rpl3/community" ],
+                           @selector(pdEditSubreddits)),
+                PDTLinkRow(@"Muted users", nil, PDTListValue(kPrimeDitMutedUsers), @[ @"rpl3/block" ],
+                           @selector(pdEditMutedUsers)),
               ]
         },
         @{
             @"title" : @"Posts & comments",
             @"rows" : @[
-                PDToggleRow(@"Awards", nil, @[ @"rpl3/award" ], kPrimeDitAwards, YES, NO),
-                PDToggleRow(@"Vote counts", nil, @[ @"rpl3/upvote" ], kPrimeDitScores, YES, NO),
+                PDTToggleRow(@"Awards", nil, @[ @"rpl3/award" ], kPrimeDitAwards, YES, NO),
+                PDTToggleRow(@"Vote counts", nil, @[ @"rpl3/upvote" ], kPrimeDitScores, YES, NO),
               ]
         },
         @{
             @"title" : @"Comments",
             @"rows" : @[
-                PDToggleRow(@"Deleted & removed comments", nil, @[ @"rpl3/delete" ], kPrimeDitRemovedComments, YES,
-                            NO),
-                PDToggleRow(@"Collapse AutoMod comments", nil, @[ @"rpl3/autoMod" ], kPrimeDitAutoCollapseAutoMod, NO,
-                            NO),
-                PDLinkRow(@"Comment thread lines", nil, PDThreadLinesSummary(), @[ @"rpl3/branch", @"rpl3/comment" ],
-                          @selector(pdOpenThreadLines)),
+                PDTToggleRow(@"Deleted & removed comments", nil, @[ @"rpl3/delete" ], kPrimeDitRemovedComments, YES,
+                             NO),
+                PDTToggleRow(@"Collapse AutoMod comments", nil, @[ @"rpl3/autoMod" ], kPrimeDitAutoCollapseAutoMod, NO,
+                             NO),
+                PDTLinkRow(@"Comment thread lines", nil, PDTThreadLinesSummary(), @[ @"rpl3/branch", @"rpl3/comment" ],
+                           @selector(pdOpenThreadLines)),
               ],
             @"help" : @[ @[
                 kPrimeDitAutoCollapseAutoMod, @"AutoModerator is the bot moderators set up; its comments start folded."
@@ -2075,8 +2083,8 @@ static NSArray *PDBuildMainSections(void) {
         @{
             @"title" : @"Interface",
             @"rows" : @[
-                PDToggleRow(@"Pop-ups & nudges", nil, @[ @"rpl3/lightbulb" ], kPrimeDitHideNags, YES, NO),
-                PDLinkRow(@"Left menu", nil, PDLeftMenuSummary(), @[ @"rpl3/menu" ], @selector(pdOpenLeftMenu)),
+                PDTToggleRow(@"Pop-ups & nudges", nil, @[ @"rpl3/lightbulb" ], kPrimeDitHideNags, YES, NO),
+                PDTLinkRow(@"Left menu", nil, PDTLeftMenuSummary(), @[ @"rpl3/menu" ], @selector(pdOpenLeftMenu)),
               ],
             @"help" : @[ @[
                 kPrimeDitHideNags,
@@ -2086,13 +2094,13 @@ static NSArray *PDBuildMainSections(void) {
         @{
             @"title" : @"Tabs",
             @"rows" : @[
-                PDToggleRow(@"Chat tab", nil, @[ @"rpl3/chat", @"rpl3/message" ], kPrimeDitChatTabDisabled, YES, YES),
-                PDToggleRow(@"Games tab", nil, @[ @"rpl3/gameController" ], kPrimeDitGamesTabDisabled, YES, NO),
-                PDLinkRow(@"Launch tab", nil, PDLaunchTabName(), @[ @"rpl3/rocket", @"rpl3/home" ],
-                          @selector(pdChooseLaunchTab)),
-                PDToggleRow(@"Account switcher", nil, @[ @"rpl3/users", @"rpl3/user" ], kPrimeDitProfileAccountSwitcher, NO,
-                            YES),
-                PDToggleRow(@"Compact tab bar", nil, @[ @"rpl3/collapseRight" ], kPrimeDitKeepTabBarExpanded, YES, NO),
+                PDTToggleRow(@"Chat tab", nil, @[ @"rpl3/chat", @"rpl3/message" ], kPrimeDitChatTabDisabled, YES, YES),
+                PDTToggleRow(@"Games tab", nil, @[ @"rpl3/gameController" ], kPrimeDitGamesTabDisabled, YES, NO),
+                PDTLinkRow(@"Launch tab", nil, PDTLaunchTabName(), @[ @"rpl3/rocket", @"rpl3/home" ],
+                           @selector(pdChooseLaunchTab)),
+                PDTToggleRow(@"Account switcher", nil, @[ @"rpl3/users", @"rpl3/user" ], kPrimeDitProfileAccountSwitcher, NO,
+                             YES),
+                PDTToggleRow(@"Compact tab bar", nil, @[ @"rpl3/collapseRight" ], kPrimeDitKeepTabBarExpanded, YES, NO),
               ],
             @"help" : @[
                 @[ kPrimeDitChatTabDisabled, @"Chat gets its own tab; Inbox keeps your notifications." ],
@@ -2103,11 +2111,11 @@ static NSArray *PDBuildMainSections(void) {
         @{
             @"title" : @"Refresh",
             @"rows" : @[
-                PDToggleRow(@"Remember Home position", nil, @[ @"rpl3/pin", @"rpl3/home" ], kPrimeDitKeepFeedOnTabReturn, NO,
-                            NO),
-                PDToggleRow(@"Confirm Home refresh", nil, @[ @"rpl3/refresh" ], kPrimeDitConfirmHomeRefresh, NO, NO),
-                PDToggleRow(@"Confirm pull to refresh", nil, @[ @"rpl3/swipeDown", @"rpl3/refresh" ],
-                            kPrimeDitConfirmPullToRefresh, NO, NO),
+                PDTToggleRow(@"Remember Home position", nil, @[ @"rpl3/pin", @"rpl3/home" ],
+                             kPrimeDitKeepFeedOnTabReturn, NO, NO),
+                PDTToggleRow(@"Confirm Home refresh", nil, @[ @"rpl3/refresh" ], kPrimeDitConfirmHomeRefresh, NO, NO),
+                PDTToggleRow(@"Confirm pull to refresh", nil, @[ @"rpl3/swipeDown", @"rpl3/refresh" ],
+                             kPrimeDitConfirmPullToRefresh, NO, NO),
               ],
             @"help" : @[
                 @[ kPrimeDitKeepFeedOnTabReturn, @"Coming back to Home keeps your place instead of reloading the feed." ],
@@ -2121,23 +2129,23 @@ static NSArray *PDBuildMainSections(void) {
       ];
 }
 
-%subclass PDSettingsViewController : BaseTableViewController
+%subclass PDTSettingsViewController : BaseTableViewController
 %new
 - (NSArray *)pdSections {
-    NSArray *sections = objc_getAssociatedObject(self, &kPDSectionsKey);
+    NSArray *sections = objc_getAssociatedObject(self, &kPDTSectionsKey);
     if (!sections) {
-        sections = PDBuildMainSections();
-        objc_setAssociatedObject(self, &kPDSectionsKey, sections, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        sections = PDTBuildMainSections();
+        objc_setAssociatedObject(self, &kPDTSectionsKey, sections, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     return sections;
 }
 %new
 - (void)pdRebuildSections {
-    objc_setAssociatedObject(self, &kPDSectionsKey, PDBuildMainSections(), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &kPDTSectionsKey, PDTBuildMainSections(), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self.tableView reloadData];
 }
 %new
-- (PDRow *)pdRowAtIndexPath:(NSIndexPath *)indexPath {
+- (PDTRow *)pdRowAtIndexPath:(NSIndexPath *)indexPath {
     NSArray *sections = [self pdSections];
     if (indexPath.section < 0 || indexPath.section >= (NSInteger)sections.count) return nil;
     NSArray *rows = sections[indexPath.section][@"rows"];
@@ -2154,16 +2162,16 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PDSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDSettingsCell" forIndexPath:indexPath];
-    PDRow *row = [self pdRowAtIndexPath:indexPath];
+    PDTSettingsCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PDTSettingsCell" forIndexPath:indexPath];
+    PDTRow *row = [self pdRowAtIndexPath:indexPath];
     BOOL isToggle = row.key != nil;
     [cell configureWithTitle:row.title
                     subtitle:row.subtitle
                        value:row.value
-                        icon:PDRowIcon(row.icons)
-                   accessory:(isToggle ? PDAccessorySwitch : PDAccessoryChevron)];
+                        icon:PDTRowIcon(row.icons)
+                   accessory:(isToggle ? PDTAccessorySwitch : PDTAccessoryChevron)];
     if (isToggle) {
-        cell.toggle.on = PDRowIsOn(row);
+        cell.toggle.on = PDTRowIsOn(row);
         cell.toggle.tag = indexPath.section * 100 + indexPath.row;
         [cell.toggle addTarget:self action:@selector(pdToggleChanged:) forControlEvents:UIControlEventValueChanged];
     }
@@ -2171,7 +2179,7 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return [self pdRowAtIndexPath:indexPath].subtitle.length ? kPDRowHeightWithSubtitle : kPDRowHeight;
+    return [self pdRowAtIndexPath:indexPath].subtitle.length ? kPDTRowHeightWithSubtitle : kPDTRowHeight;
 }
 %new
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
@@ -2180,46 +2188,51 @@ static NSArray *PDBuildMainSections(void) {
     NSDictionary *info = sections[section];
     void (^onInfo)(void) = nil;
     if ([info[@"help"] count]) {
-        __weak PDSettingsViewController *weakSelf = self;
+        __weak PDTSettingsViewController *weakSelf = self;
         onInfo = ^{
             [weakSelf pdShowHelpForSection:section];
         };
     }
-    return PDSectionHeaderViewWithInfo(info[@"title"], kPDSwitchColumnInset, onInfo);
+    return PDTSectionHeaderViewWithInfo(info[@"title"], kPDTSwitchColumnInset, onInfo);
 }
 %new
 - (void)pdShowHelpForSection:(NSInteger)section {
     NSArray *sections = [self pdSections];
     if (section < 0 || section >= (NSInteger)sections.count) return;
     NSDictionary *info = sections[section];
-    NSMutableArray<PDHelpItem *> *items = [NSMutableArray array];
+    NSMutableArray<PDTHelpItem *> *items = [NSMutableArray array];
     for (NSArray *entry in info[@"help"])
-        for (PDRow *row in info[@"rows"])
-            if ([row.key isEqualToString:entry[0]]) [items addObject:PDHelp(row.title, entry[1], PDRowIcon(row.icons))];
-    PDPresentHelpSheet(self, info[@"title"], items);
+        for (PDTRow *row in info[@"rows"])
+            if ([row.key isEqualToString:entry[0]]) [items addObject:PDTHelp(row.title, entry[1], PDTRowIcon(row.icons))];
+    PDTPresentHelpSheet(self, info[@"title"], items);
 }
 %new
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return kPDHeaderHeight;
+    return kPDTHeaderHeight;
 }
 %new
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return kPDSectionGap;
+    return section == (NSInteger)[self pdSections].count - 1 ? kPDTLinkFooterHeight : kPDTSectionGap;
+}
+%new
+- (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
+    if (section != (NSInteger)[self pdSections].count - 1) return nil;
+    return PDTHowItWorksFooter(self, @selector(pdShowHowItWorks));
 }
 %new
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    PDRow *row = [self pdRowAtIndexPath:indexPath];
+    PDTRow *row = [self pdRowAtIndexPath:indexPath];
     if (!row.action || ![self respondsToSelector:row.action]) return;
     ((void (*)(id, SEL))[self methodForSelector:row.action])(self, row.action);
 }
 - (void)viewDidLoad {
     %orig;
     self.title = @"PrimeDit";
-    self.navigationItem.rightBarButtonItem = PDDoneItem(self, @selector(pdDone));
+    self.navigationItem.rightBarButtonItem = PDTDoneItem(self, @selector(pdDone));
     self.view.backgroundColor = UIColor.systemBackgroundColor;
-    PDStyleSettingsTable(self.tableView);
-    self.tableView.tableFooterView = PDSettingsFooter(self, @selector(pdShowHowItWorks));
+    PDTStyleSettingsTable(self.tableView);
+    self.tableView.tableFooterView = PDTCreditFooter();
 }
 // Closes Reddit's settings when they are a sheet, and steps back otherwise.
 %new
@@ -2233,14 +2246,11 @@ static NSArray *PDBuildMainSections(void) {
 // How the switches and lists read, for anyone who wonders.
 %new
 - (void)pdShowHowItWorks {
-    PDPresentHelpSheet(self, @"How it works", @[
-        PDHelp(@"Reddit features",
-               @"A switch named after something in Reddit shows it. Turn the switch off to hide it.",
-               PDSymbol(@"eye")),
-        PDHelp(@"PrimeDit features", @"A switch named after something PrimeDit adds turns it on.",
-               PDSymbol(@"sparkles")),
-        PDHelp(@"Filter lists", @"Keywords, subreddits and muted users hide the posts that match.",
-               PDSymbol(@"line.3.horizontal.decrease.circle")),
+    PDTPresentHelpSheet(self, @"How it works", @[
+        PDTHelp(@"Reddit features", @"On: as in Reddit. Off: removed by PrimeDit.", PDTSymbol(@"eye")),
+        PDTHelp(@"PrimeDit features", @"On: added by PrimeDit. Off: as in Reddit.", PDTSymbol(@"sparkles")),
+        PDTHelp(@"Filter lists", @"Hide what matches a keyword, a subreddit or a muted user.",
+                PDTSymbol(@"line.3.horizontal.decrease.circle")),
     ]);
 }
 - (void)viewWillAppear:(BOOL)animated {
@@ -2249,7 +2259,7 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (void)pdToggleChanged:(UISwitch *)sender {
-    PDRow *row = [self pdRowAtIndexPath:[NSIndexPath indexPathForRow:sender.tag % 100 inSection:sender.tag / 100]];
+    PDTRow *row = [self pdRowAtIndexPath:[NSIndexPath indexPathForRow:sender.tag % 100 inSection:sender.tag / 100]];
     if (!row.key) return;
     [NSUserDefaults.standardUserDefaults setBool:(row.shownWhenOn ? !sender.on : sender.on) forKey:row.key];
     postPrefsUpdatedNotification();
@@ -2266,20 +2276,20 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (void)pdOpenThreadLines {
-    [self pdPushController:[[PDThreadLinesViewController alloc] initWithStyle:UITableViewStyleGrouped]];
+    [self pdPushController:[[PDTThreadLinesViewController alloc] initWithStyle:UITableViewStyleGrouped]];
 }
 %new
 - (void)pdOpenLeftMenu {
-    [self pdPushController:[[PDLeftMenuViewController alloc] initWithStyle:UITableViewStyleGrouped]];
+    [self pdPushController:[[PDTLeftMenuViewController alloc] initWithStyle:UITableViewStyleGrouped]];
 }
 %new
 - (void)pdOpenBackup {
-    [self pdPushController:[[PDBackupViewController alloc] initWithStyle:UITableViewStyleGrouped]];
+    [self pdPushController:[[PDTBackupViewController alloc] initWithStyle:UITableViewStyleGrouped]];
 }
 %new
 - (void)pdOpenCompatibility {
 #if PRIMEDIT_DEBUG
-    [self pdPushController:[[PDCompatibilityViewController alloc] initWithStyle:UITableViewStyleGrouped]];
+    [self pdPushController:[[PDTCompatibilityViewController alloc] initWithStyle:UITableViewStyleGrouped]];
 #endif
 }
 %new
@@ -2287,9 +2297,9 @@ static NSArray *PDBuildMainSections(void) {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Launch tab"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak PDSettingsViewController *weakSelf = self;
+    __weak PDTSettingsViewController *weakSelf = self;
     for (NSInteger i = 0; i < 5; i++) {
-        [sheet addAction:[UIAlertAction actionWithTitle:kPDLaunchTabNames[i]
+        [sheet addAction:[UIAlertAction actionWithTitle:kPDTLaunchTabNames[i]
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction *action) {
             [NSUserDefaults.standardUserDefaults setInteger:i forKey:kPrimeDitLaunchTab];
@@ -2305,7 +2315,7 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (void)pdEditKeywords {
-    [self pdPushController:[[PDListEditorViewController alloc]
+    [self pdPushController:[[PDTListEditorViewController alloc]
                                initWithTitle:@"Keywords"
                                      listKey:kPrimeDitKeywords
                                   enabledKey:kPrimeDitKeywordsEnabled
@@ -2314,15 +2324,15 @@ static NSArray *PDBuildMainSections(void) {
 }
 %new
 - (void)pdEditSubreddits {
-    [self pdPushController:[[PDListEditorViewController alloc] initWithTitle:@"Subreddits"
-                                                                     listKey:kPrimeDitSubreddits
-                                                                  enabledKey:kPrimeDitSubredditsEnabled
-                                                                 placeholder:@"Add a subreddit"
+    [self pdPushController:[[PDTListEditorViewController alloc] initWithTitle:@"Subreddits"
+                                                                      listKey:kPrimeDitSubreddits
+                                                                   enabledKey:kPrimeDitSubredditsEnabled
+                                                                  placeholder:@"Add a subreddit"
                                                                       header:@"Hide posts from"]];
 }
 %new
 - (void)pdEditMutedUsers {
-    [self pdPushController:[[PDListEditorViewController alloc]
+    [self pdPushController:[[PDTListEditorViewController alloc]
                                initWithTitle:@"Muted users"
                                      listKey:kPrimeDitMutedUsers
                                   enabledKey:kPrimeDitMutedUsersEnabled

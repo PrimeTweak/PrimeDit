@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import "Preferences.h"
-#import "Compatibility.h"
+#import "PDTPreferences.h"
+#import "PDTCompatibility.h"
 
 // View-level options (Reddit 2026.38): pop-ups and nudges, collapsed ad slots and AI
 // summaries, and colored comment thread lines.
@@ -17,30 +17,30 @@ static NSInteger gThreadThemeIndex;
 
 static NSHashTable<UIView *> *gHiddenNagChildViews;
 
-static char kPDAdSlotStateKey;
-static char kPDSummaryStateKey;
-static char kPDNagStateKey;
-static char kPDThreadLineStateKey;
-static char kPDPromptHandledKey;
-static char kPDInterfaceObserver;
+static char kPDTAdSlotStateKey;
+static char kPDTSummaryStateKey;
+static char kPDTNagStateKey;
+static char kPDTThreadLineStateKey;
+static char kPDTPromptHandledKey;
+static char kPDTInterfaceObserver;
 
 #if PRIMEDIT_DEBUG
 // Compatibility check: the option a collapsed view belongs to.
-static PDCompatOption PDCompatOptionForCollapseKey(const void *key) {
-    if (key == &kPDAdSlotStateKey) return PDCompatPromoted;
-    if (key == &kPDSummaryStateKey) return PDCompatAIAnswers;
-    return PDCompatNags;
+static PDTCompatOption PDTCompatOptionForCollapseKey(const void *key) {
+    if (key == &kPDTAdSlotStateKey) return PDTCompatPromoted;
+    if (key == &kPDTSummaryStateKey) return PDTCompatAIAnswers;
+    return PDTCompatNags;
 }
 #endif
 
-static void PDLoadInterfacePrefs(void) {
+static void PDTLoadInterfacePrefs(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
     gHideNags = [defaults boolForKey:kPrimeDitHideNags];
-    gHidePromoted = PDPrefBool(kPrimeDitPromoted, YES);
+    gHidePromoted = PDTPrefBool(kPrimeDitPromoted, YES);
     gHideAIBoxes = [defaults boolForKey:kPrimeDitAIBoxes];
     gThreadLinesEnabled = [defaults boolForKey:kPrimeDitThreadLinesEnabled];
     gThreadRainbow = [defaults boolForKey:kPrimeDitThreadRainbowMode];
-    gThreadDepthCycling = PDPrefBool(kPrimeDitThreadDepthCycling, YES);
+    gThreadDepthCycling = PDTPrefBool(kPrimeDitThreadDepthCycling, YES);
     gThreadThickness = [defaults objectForKey:kPrimeDitThreadLineThickness]
                            ? [defaults floatForKey:kPrimeDitThreadLineThickness]
                            : 0;
@@ -51,7 +51,7 @@ static void PDLoadInterfacePrefs(void) {
 
 #pragma mark - Class matching
 
-static BOOL PDCstringLooksLikeNag(const char *n) {
+static BOOL PDTCstringLooksLikeNag(const char *n) {
     if (!n) return NO;
     if (strstr(n, "RedditAppSettings") || strstr(n, "AccountSettings")) return NO;
     if (strstr(n, "ContributionKickstarting")) return strstr(n, "EntryPoint") && strstr(n, "SliceView");
@@ -60,32 +60,32 @@ static BOOL PDCstringLooksLikeNag(const char *n) {
 }
 
 enum {
-    kPDFlagComputed = 1 << 0,
-    kPDFlagAdSlot = 1 << 1,
-    kPDFlagThreadLine = 1 << 2,
-    kPDFlagPromptView = 1 << 3,
-    kPDFlagSummary = 1 << 4,
-    kPDFlagNag = 1 << 5,
+    kPDTFlagComputed = 1 << 0,
+    kPDTFlagAdSlot = 1 << 1,
+    kPDTFlagThreadLine = 1 << 2,
+    kPDTFlagPromptView = 1 << 3,
+    kPDTFlagSummary = 1 << 4,
+    kPDTFlagNag = 1 << 5,
 };
 
 // Per-class flags, computed once; only called on the main thread.
-static NSUInteger PDClassFlags(Class cls) {
+static NSUInteger PDTClassFlags(Class cls) {
     static CFMutableDictionaryRef cache;
     if (!cache) cache = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
     uintptr_t cached = (uintptr_t)CFDictionaryGetValue(cache, (__bridge const void *)cls);
     if (cached) return cached;
 
-    NSUInteger flags = kPDFlagComputed;
+    NSUInteger flags = kPDTFlagComputed;
     const char *n = class_getName(cls);
     if (n) {
         if (strstr(n, "HiddenAdPostReplacementSliceView") || strstr(n, "AdFeedBlankUnitSliceView"))
-            flags |= kPDFlagAdSlot;
-        if (strstr(n, "VerticalDivider") || strstr(n, "ThreadLine")) flags |= kPDFlagThreadLine;
+            flags |= kPDTFlagAdSlot;
+        if (strstr(n, "VerticalDivider") || strstr(n, "ThreadLine")) flags |= kPDTFlagThreadLine;
         if (strstr(n, "Notifications_NotificationsPrompting") &&
                 (strstr(n, "RequestPermission") || strstr(n, "PrePrompt")))
-            flags |= kPDFlagPromptView;
-        if (strstr(n, "ConversationSummarySliceView")) flags |= kPDFlagSummary;
-        if (PDCstringLooksLikeNag(n)) flags |= kPDFlagNag;
+            flags |= kPDTFlagPromptView;
+        if (strstr(n, "ConversationSummarySliceView")) flags |= kPDTFlagSummary;
+        if (PDTCstringLooksLikeNag(n)) flags |= kPDTFlagNag;
     }
     CFDictionarySetValue(cache, (__bridge const void *)cls, (const void *)(uintptr_t)flags);
     return flags;
@@ -93,7 +93,7 @@ static NSUInteger PDClassFlags(Class cls) {
 
 #pragma mark - Collapsing
 
-static void PDInvalidateEnclosingList(UIView *view) {
+static void PDTInvalidateEnclosingList(UIView *view) {
     [view invalidateIntrinsicContentSize];
     UIView *superview = view.superview;
     [superview invalidateIntrinsicContentSize];
@@ -123,7 +123,7 @@ static void PDInvalidateEnclosingList(UIView *view) {
 // Hides a view (hidden, transparent, zero height) and restores it from the
 // saved state later. The enclosing list is re-laid out only on the first
 // collapse, so a list that resets frames cannot loop.
-static void PDSetCollapsed(UIView *view, BOOL collapse, const void *key, BOOL relayoutList) {
+static void PDTSetCollapsed(UIView *view, BOOL collapse, const void *key, BOOL relayoutList) {
     NSMutableDictionary *saved = objc_getAssociatedObject(view, key);
     if (collapse) {
         BOOL first = (saved == nil);
@@ -148,8 +148,8 @@ static void PDSetCollapsed(UIView *view, BOOL collapse, const void *key, BOOL re
             view.frame = frame;
             changed = YES;
         }
-        if (changed && first && relayoutList) PDInvalidateEnclosingList(view);
-        PDCOMPAT_ACTION_IF(first, PDCompatOptionForCollapseKey(key), @"%s", object_getClassName(view));
+        if (changed && first && relayoutList) PDTInvalidateEnclosingList(view);
+        PDTCOMPAT_ACTION_IF(first, PDTCompatOptionForCollapseKey(key), @"%s", object_getClassName(view));
         return;
     }
 
@@ -161,15 +161,15 @@ static void PDSetCollapsed(UIView *view, BOOL collapse, const void *key, BOOL re
     view.frame = frame;
     objc_setAssociatedObject(view, key, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (relayoutList) {
-        PDInvalidateEnclosingList(view);
+        PDTInvalidateEnclosingList(view);
     } else {
         [view setNeedsLayout];
         [view.superview setNeedsLayout];
     }
 }
 
-static void PDApplyNagView(UIView *view) {
-    PDSetCollapsed(view, gHideNags, &kPDNagStateKey, YES);
+static void PDTApplyNagView(UIView *view) {
+    PDTSetCollapsed(view, gHideNags, &kPDTNagStateKey, YES);
     if (![view respondsToSelector:NSSelectorFromString(@"dismissOverlay")]) return;
     id overlay = nil;
     @try {
@@ -177,14 +177,14 @@ static void PDApplyNagView(UIView *view) {
     } @catch (NSException *exception) {
         overlay = nil;
     }
-    if ([overlay isKindOfClass:UIView.class]) PDSetCollapsed(overlay, gHideNags, &kPDNagStateKey, YES);
+    if ([overlay isKindOfClass:UIView.class]) PDTSetCollapsed(overlay, gHideNags, &kPDTNagStateKey, YES);
 }
 
 #pragma mark - Thread lines
 
 // Palettes in stored index order, so exported settings stay compatible;
 // the settings page draws them as swatches.
-NSArray<UIColor *> *PDPaletteColors(NSInteger index) {
+NSArray<UIColor *> *PDTPaletteColors(NSInteger index) {
     static NSArray<NSArray<UIColor *> *> *palettes;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -224,19 +224,19 @@ NSArray<UIColor *> *PDPaletteColors(NSInteger index) {
 }
 
 // Reply depth = number of sibling thread lines to the left of this one.
-static NSUInteger PDDividerDepth(UIView *view) {
+static NSUInteger PDTDividerDepth(UIView *view) {
     NSUInteger depth = 0;
     CGFloat x = view.frame.origin.x;
     for (UIView *sibling in view.superview.subviews) {
         if (sibling == view) continue;
-        if (!(PDClassFlags(object_getClass(sibling)) & kPDFlagThreadLine)) continue;
+        if (!(PDTClassFlags(object_getClass(sibling)) & kPDTFlagThreadLine)) continue;
         if (sibling.frame.origin.x < x) depth++;
     }
     return depth;
 }
 
-static void PDApplyThreadLine(UIView *view) {
-    NSMutableDictionary *saved = objc_getAssociatedObject(view, &kPDThreadLineStateKey);
+static void PDTApplyThreadLine(UIView *view) {
+    NSMutableDictionary *saved = objc_getAssociatedObject(view, &kPDTThreadLineStateKey);
 
     if (!gThreadLinesEnabled) {
         if (!saved) return;
@@ -249,7 +249,7 @@ static void PDApplyThreadLine(UIView *view) {
             frame.size.width = width;
             view.frame = frame;
         }
-        objc_setAssociatedObject(view, &kPDThreadLineStateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, &kPDTThreadLineStateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return;
     }
 
@@ -257,8 +257,8 @@ static void PDApplyThreadLine(UIView *view) {
         saved = [NSMutableDictionary dictionary];
         saved[@"width"] = @(view.frame.size.width);
         saved[@"color"] = view.backgroundColor ?: (id)NSNull.null;
-        objc_setAssociatedObject(view, &kPDThreadLineStateKey, saved, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        PDCOMPAT_ACTION(PDCompatThreadLines, @"Depth %lu", (unsigned long)PDDividerDepth(view));
+        objc_setAssociatedObject(view, &kPDTThreadLineStateKey, saved, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        PDTCOMPAT_ACTION(PDTCompatThreadLines, @"Depth %lu", (unsigned long)PDTDividerDepth(view));
     }
 
     CGFloat target = gThreadThickness > 0.01 ? gThreadThickness : [saved[@"width"] doubleValue];
@@ -276,9 +276,9 @@ static void PDApplyThreadLine(UIView *view) {
                            brightness:0.9
                                 alpha:1.0];
     } else {
-        NSArray<UIColor *> *colors = PDPaletteColors(gThreadThemeIndex);
+        NSArray<UIColor *> *colors = PDTPaletteColors(gThreadThemeIndex);
         if (colors.count)
-            color = gThreadDepthCycling ? colors[PDDividerDepth(view) % colors.count] : colors[0];
+            color = gThreadDepthCycling ? colors[PDTDividerDepth(view) % colors.count] : colors[0];
     }
     if (!color) {
         id original = saved[@"color"];
@@ -292,7 +292,7 @@ static void PDApplyThreadLine(UIView *view) {
 
 #pragma mark - Notification prompts and nag controllers
 
-static BOOL PDClassNameLooksLikeNotificationPrompt(NSString *name) {
+static BOOL PDTClassNameLooksLikeNotificationPrompt(NSString *name) {
     if (![name containsString:@"Notifications_NotificationsPrompting"]) return NO;
     for (NSString *needle in @[ @"RequestPermission", @"PrePrompt", @"PromptPresenter", @"FiveSessions",
                                 @"RePrompt", @"ReEnablement", @"InitialPush" ])
@@ -300,7 +300,7 @@ static BOOL PDClassNameLooksLikeNotificationPrompt(NSString *name) {
     return NO;
 }
 
-static BOOL PDStringLooksLikeNotificationPrompt(NSString *text) {
+static BOOL PDTStringLooksLikeNotificationPrompt(NSString *text) {
     if (![text isKindOfClass:NSString.class] || text.length == 0) return NO;
     NSString *lower = text.lowercaseString;
     for (NSString *needle in @[ @"turn on notification", @"allow reddit notification",
@@ -310,56 +310,56 @@ static BOOL PDStringLooksLikeNotificationPrompt(NSString *text) {
     return NO;
 }
 
-static BOOL PDIsNotificationPermissionPrompt(UIViewController *vc) {
+static BOOL PDTIsNotificationPermissionPrompt(UIViewController *vc) {
     if (!vc) return NO;
     if ([vc isKindOfClass:UINavigationController.class])
-        return PDIsNotificationPermissionPrompt(((UINavigationController *)vc).topViewController);
-    if (PDClassNameLooksLikeNotificationPrompt(NSStringFromClass(vc.class))) return YES;
+        return PDTIsNotificationPermissionPrompt(((UINavigationController *)vc).topViewController);
+    if (PDTClassNameLooksLikeNotificationPrompt(NSStringFromClass(vc.class))) return YES;
     if ([vc isKindOfClass:UIAlertController.class]) {
         UIAlertController *alert = (UIAlertController *)vc;
-        return PDStringLooksLikeNotificationPrompt(alert.title) ||
-               PDStringLooksLikeNotificationPrompt(alert.message);
+        return PDTStringLooksLikeNotificationPrompt(alert.title) ||
+               PDTStringLooksLikeNotificationPrompt(alert.message);
     }
     return NO;
 }
 
-static BOOL PDObjectLooksLikeNag(id object) {
-    return object && PDCstringLooksLikeNag(object_getClassName(object));
+static BOOL PDTObjectLooksLikeNag(id object) {
+    return object && PDTCstringLooksLikeNag(object_getClassName(object));
 }
 
-static BOOL PDShouldSuppressNagController(UIViewController *vc) {
+static BOOL PDTShouldSuppressNagController(UIViewController *vc) {
     if (!gHideNags || !vc) return NO;
     if ([vc.tabBarController.viewControllers containsObject:vc]) return NO;
-    if (PDObjectLooksLikeNag(vc)) return YES;
+    if (PDTObjectLooksLikeNag(vc)) return YES;
     if ([vc isKindOfClass:UINavigationController.class])
-        return PDObjectLooksLikeNag(((UINavigationController *)vc).topViewController);
+        return PDTObjectLooksLikeNag(((UINavigationController *)vc).topViewController);
     return NO;
 }
 
-static UIViewController *PDOwningViewController(UIView *view) {
+static UIViewController *PDTOwningViewController(UIView *view) {
     for (UIResponder *r = view.nextResponder; r; r = r.nextResponder)
         if ([r isKindOfClass:UIViewController.class]) return (UIViewController *)r;
     return nil;
 }
 
-static void PDHandlePromptView(UIView *view) {
-    if (!gHideNags || objc_getAssociatedObject(view, &kPDPromptHandledKey)) return;
-    UIViewController *owner = PDOwningViewController(view);
+static void PDTHandlePromptView(UIView *view) {
+    if (!gHideNags || objc_getAssociatedObject(view, &kPDTPromptHandledKey)) return;
+    UIViewController *owner = PDTOwningViewController(view);
     NSString *name = owner ? NSStringFromClass(owner.class) : @"";
-    if (!(PDIsNotificationPermissionPrompt(owner) ||
+    if (!(PDTIsNotificationPermissionPrompt(owner) ||
                 [name containsString:@"RPLBottomSheetPanModalWrapperViewController"] ||
                 [name containsString:@"Notifications_NotificationsPrompting"]))
         return;
-    objc_setAssociatedObject(view, &kPDPromptHandledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, &kPDTPromptHandledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     owner.view.hidden = YES;
     if (owner.presentingViewController) [owner dismissViewControllerAnimated:NO completion:nil];
     view.hidden = YES;
-    PDCOMPAT_ACTION(PDCompatNags, @"Notification prompt hidden");
+    PDTCOMPAT_ACTION(PDTCompatNags, @"Notification prompt hidden");
 }
 
 #pragma mark - Refresh after a settings change
 
-static void PDRefreshVisibleViews(void) {
+static void PDTRefreshVisibleViews(void) {
     NSMutableArray<UIView *> *stack = [NSMutableArray array];
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if ([scene isKindOfClass:UIWindowScene.class])
@@ -370,20 +370,20 @@ static void PDRefreshVisibleViews(void) {
         UIView *view = stack.lastObject;
         [stack removeLastObject];
         visited++;
-        if (PDClassFlags(object_getClass(view)) != kPDFlagComputed) [view setNeedsLayout];
+        if (PDTClassFlags(object_getClass(view)) != kPDTFlagComputed) [view setNeedsLayout];
         [stack addObjectsFromArray:view.subviews];
     }
 }
 
-static void PDInterfacePrefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name,
-                                    const void *object, CFDictionaryRef userInfo) {
+static void PDTInterfacePrefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name,
+                                     const void *object, CFDictionaryRef userInfo) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        PDLoadInterfacePrefs();
+        PDTLoadInterfacePrefs();
         if (!gHideNags) {
             for (UIView *view in gHiddenNagChildViews.allObjects) view.hidden = NO;
             [gHiddenNagChildViews removeAllObjects];
         }
-        PDRefreshVisibleViews();
+        PDTRefreshVisibleViews();
     });
 }
 
@@ -392,14 +392,14 @@ static void PDInterfacePrefsChanged(CFNotificationCenterRef center, void *observ
 #if PRIMEDIT_DEBUG
 // Compatibility check: the thread-line views on screen, whether they were styled and
 // still show the applied color, plus other thin app views that may be the lines.
-static void PDCompatScanLines(UIView *view, int depth, NSCountedSet<NSString *> *lines, NSCountedSet<NSString *> *thin,
-                              NSInteger *styled, NSInteger *recolored, CGFloat *minWidth, CGFloat *maxWidth) {
+static void PDTCompatScanLines(UIView *view, int depth, NSCountedSet<NSString *> *lines, NSCountedSet<NSString *> *thin,
+                               NSInteger *styled, NSInteger *recolored, CGFloat *minWidth, CGFloat *maxWidth) {
     if (depth > 80 || view.hidden || view.alpha < 0.01) return;
     Class cls = object_getClass(view);
     NSString *name = [NSStringFromClass(cls) componentsSeparatedByString:@"."].lastObject;
-    if (PDClassFlags(cls) & kPDFlagThreadLine) {
+    if (PDTClassFlags(cls) & kPDTFlagThreadLine) {
         [lines addObject:name];
-        NSDictionary *saved = objc_getAssociatedObject(view, &kPDThreadLineStateKey);
+        NSDictionary *saved = objc_getAssociatedObject(view, &kPDTThreadLineStateKey);
         if (saved) (*styled)++;
         id applied = saved[@"applied"];
         if ([applied isKindOfClass:UIColor.class] && ![view.backgroundColor isEqual:applied]) (*recolored)++;
@@ -410,10 +410,10 @@ static void PDCompatScanLines(UIView *view, int depth, NSCountedSet<NSString *> 
         if (image && strncmp(image, "/System/", 8) && strncmp(image, "/usr/", 5)) [thin addObject:name];
     }
     for (UIView *subview in view.subviews)
-        PDCompatScanLines(subview, depth + 1, lines, thin, styled, recolored, minWidth, maxWidth);
+        PDTCompatScanLines(subview, depth + 1, lines, thin, styled, recolored, minWidth, maxWidth);
 }
 
-static NSString *PDCompatCountedText(NSCountedSet<NSString *> *set, NSUInteger limit) {
+static NSString *PDTCompatCountedText(NSCountedSet<NSString *> *set, NSUInteger limit) {
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
     for (NSString *name in set) {
         if (parts.count == limit) break;
@@ -422,7 +422,7 @@ static NSString *PDCompatCountedText(NSCountedSet<NSString *> *set, NSUInteger l
     return [parts componentsJoinedByString:@", "];
 }
 
-NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
+NSDictionary<NSString *, id> *PDTCompatThreadLinesOnScreen(void) {
     NSCountedSet<NSString *> *lines = [NSCountedSet set];
     NSCountedSet<NSString *> *thin = [NSCountedSet set];
     NSInteger styled = 0, recolored = 0;
@@ -430,8 +430,8 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (![scene isKindOfClass:UIWindowScene.class]) continue;
         for (UIWindow *window in ((UIWindowScene *)scene).windows)
-            if (![NSStringFromClass(window.class) isEqualToString:@"PDCompatButtonWindow"])
-                PDCompatScanLines(window, 0, lines, thin, &styled, &recolored, &minWidth, &maxWidth);
+            if (![NSStringFromClass(window.class) isEqualToString:@"PDTCompatButtonWindow"])
+                PDTCompatScanLines(window, 0, lines, thin, &styled, &recolored, &minWidth, &maxWidth);
     }
     NSUInteger total = 0;
     for (NSString *name in lines) total += [lines countForObject:name];
@@ -439,9 +439,10 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
     if (total)
         text = [NSString stringWithFormat:@"On screen: %@ \u00b7 %ld styled \u00b7 %ld recolored afterwards \u00b7 "
                                           @"width %.1f-%.1f pt",
-                                          PDCompatCountedText(lines, 3), (long)styled, (long)recolored,
+                                          PDTCompatCountedText(lines, 3), (long)styled, (long)recolored,
                                           minWidth, maxWidth];
-    if (thin.count) text = [text stringByAppendingFormat:@" \u00b7 other thin views: %@", PDCompatCountedText(thin, 4)];
+    if (thin.count)
+        text = [text stringByAppendingFormat:@" \u00b7 other thin views: %@", PDTCompatCountedText(thin, 4)];
     return @{@"lines" : @(total), @"styled" : @(styled), @"recolored" : @(recolored), @"text" : text};
 }
 #endif
@@ -450,20 +451,20 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
 - (void)layoutSubviews {
     %orig;
     if (!NSThread.isMainThread) return;
-    NSUInteger flags = PDClassFlags(object_getClass(self));
-    if (flags == kPDFlagComputed) return;
-    if (flags & kPDFlagAdSlot) PDSetCollapsed(self, gHidePromoted, &kPDAdSlotStateKey, NO);
-    if (flags & kPDFlagThreadLine) PDApplyThreadLine(self);
-    if (flags & kPDFlagPromptView) PDHandlePromptView(self);
-    if (flags & kPDFlagSummary) PDSetCollapsed(self, gHideAIBoxes, &kPDSummaryStateKey, YES);
-    if (flags & kPDFlagNag) PDApplyNagView(self);
+    NSUInteger flags = PDTClassFlags(object_getClass(self));
+    if (flags == kPDTFlagComputed) return;
+    if (flags & kPDTFlagAdSlot) PDTSetCollapsed(self, gHidePromoted, &kPDTAdSlotStateKey, NO);
+    if (flags & kPDTFlagThreadLine) PDTApplyThreadLine(self);
+    if (flags & kPDTFlagPromptView) PDTHandlePromptView(self);
+    if (flags & kPDTFlagSummary) PDTSetCollapsed(self, gHideAIBoxes, &kPDTSummaryStateKey, YES);
+    if (flags & kPDTFlagNag) PDTApplyNagView(self);
 }
 %end
 
 %hook UIViewController
 - (void)presentViewController:(UIViewController *)vc animated:(BOOL)animated completion:(void (^)(void))completion {
-    if (gHideNags && (PDIsNotificationPermissionPrompt(vc) || PDShouldSuppressNagController(vc))) {
-        PDCOMPAT_ACTION(PDCompatNags, @"Blocked %s", object_getClassName(vc));
+    if (gHideNags && (PDTIsNotificationPermissionPrompt(vc) || PDTShouldSuppressNagController(vc))) {
+        PDTCOMPAT_ACTION(PDTCompatNags, @"Blocked %s", object_getClassName(vc));
         if (completion) completion();
         return;
     }
@@ -471,15 +472,15 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
 }
 
 - (void)addChildViewController:(UIViewController *)child {
-    if (gHideNags && PDIsNotificationPermissionPrompt(child)) {
-        PDCOMPAT_ACTION(PDCompatNags, @"Blocked %s", object_getClassName(child));
+    if (gHideNags && PDTIsNotificationPermissionPrompt(child)) {
+        PDTCOMPAT_ACTION(PDTCompatNags, @"Blocked %s", object_getClassName(child));
         return;
     }
     %orig;
     if (gHideNags && ![child isKindOfClass:UINavigationController.class] &&
-            PDShouldSuppressNagController(child)) {
+            PDTShouldSuppressNagController(child)) {
         child.view.hidden = YES;
-        PDCOMPAT_ACTION(PDCompatNags, @"Hid %s", object_getClassName(child));
+        PDTCOMPAT_ACTION(PDTCompatNags, @"Hid %s", object_getClassName(child));
         if (!gHiddenNagChildViews) gHiddenNagChildViews = [NSHashTable weakObjectsHashTable];
         [gHiddenNagChildViews addObject:child.view];
     }
@@ -488,8 +489,8 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
 
 %hook UIWindow
 - (void)setRootViewController:(UIViewController *)root {
-    if (gHideNags && PDIsNotificationPermissionPrompt(root)) {
-        PDCOMPAT_ACTION(PDCompatNags, @"Blocked %s", object_getClassName(root));
+    if (gHideNags && PDTIsNotificationPermissionPrompt(root)) {
+        PDTCOMPAT_ACTION(PDTCompatNags, @"Blocked %s", object_getClassName(root));
         return;
     }
     %orig;
@@ -500,7 +501,7 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
 %hook PushNotificationPromptingManagerObjC
 - (void)showUpvotePromptIfNeeded {
     if (gHideNags) {
-        PDCOMPAT_ACTION(PDCompatNags, @"Upvote notification prompt skipped");
+        PDTCOMPAT_ACTION(PDTCompatNags, @"Upvote notification prompt skipped");
         return;
     }
     %orig;
@@ -509,9 +510,9 @@ NSDictionary<NSString *, id> *PDCompatThreadLinesOnScreen(void) {
 %end
 
 %ctor {
-    PDLoadInterfacePrefs();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), &kPDInterfaceObserver,
-                                    PDInterfacePrefsChanged, CFSTR(kPrimeDitPrefsNotification),
+    PDTLoadInterfacePrefs();
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), &kPDTInterfaceObserver,
+                                    PDTInterfacePrefsChanged, CFSTR(kPrimeDitPrefsNotification),
                                     NULL, CFNotificationSuspensionBehaviorCoalesce);
     %init;
     %init(PromptBridge,
