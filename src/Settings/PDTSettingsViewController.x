@@ -26,8 +26,10 @@ static const CGFloat kPDTRowHeight = 48.0;
 static const CGFloat kPDTRowHeightWithSubtitle = 64.0;
 static const CGFloat kPDTHeaderHeight = 32.0;
 static const CGFloat kPDTSectionGap = 16.0;
-static const CGFloat kPDTLinkFooterHeight = 44.0;
+static const CGFloat kPDTLinkHeight = 44.0;
+static const CGFloat kPDTLinkCenterY = 17.0;
 static const CGFloat kPDTIconCenterX = 32.0;
+static const CGFloat kPDTIconBox = 24.0;
 static const CGFloat kPDTTextInset = 57.0;
 static const CGFloat kPDTPlainTextInset = 20.0;
 // Right edges measured on settings rows: switches at 12.0 pt, chevrons and checks
@@ -202,8 +204,8 @@ typedef NS_ENUM(NSInteger, PDTAccessory) {
     [NSLayoutConstraint activateConstraints:@[
         [_iconView.centerXAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:kPDTIconCenterX],
         [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [_iconView.widthAnchor constraintEqualToConstant:24.0],
-        [_iconView.heightAnchor constraintEqualToConstant:24.0],
+        [_iconView.widthAnchor constraintEqualToConstant:kPDTIconBox],
+        [_iconView.heightAnchor constraintEqualToConstant:kPDTIconBox],
         _textLeading,
         [text.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         [text.trailingAnchor constraintLessThanOrEqualToAnchor:trailing.leadingAnchor constant:-12.0],
@@ -405,30 +407,50 @@ static UIView *PDTCreditFooter(void) {
     return footer;
 }
 
-// The "How it works" link under the last section, in the footer's gray, its
-// icon centered on the row icons.
-static UIView *PDTHowItWorksFooter(id target, SEL action) {
+// The "How it works" link under the last section: its icon and title sit in the
+// row icon and title columns, in the footer's gray.
+@interface PDTHowItWorksLink : UIControl
+- (instancetype)initWithTarget:(id)target action:(SEL)action;
+@end
+
+@implementation PDTHowItWorksLink
+
+- (instancetype)initWithTarget:(id)target action:(SEL)action {
+    self = [super initWithFrame:CGRectZero];
+    if (!self) return nil;
+    UIColor *gray = UIColor.systemGray3Color;
     UIImageSymbolConfiguration *size =
             [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightRegular];
-    UIImage *glyph = [UIImage systemImageNamed:@"info.circle" withConfiguration:size];
-    UIButtonConfiguration *style = [UIButtonConfiguration plainButtonConfiguration];
-    style.image = glyph;
-    style.imagePadding = 6.0;
-    style.contentInsets = NSDirectionalEdgeInsetsMake(8.0, 0.0, 16.0, 12.0);
-    style.baseForegroundColor = UIColor.systemGray3Color;
-    style.attributedTitle = [[NSAttributedString alloc] initWithString:@"How it works"
-                                                            attributes:@{NSFontAttributeName : PDTSettingsFont(15, NO)}];
-    UIButton *link = [UIButton buttonWithConfiguration:style primaryAction:nil];
-    [link addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
-    link.translatesAutoresizingMaskIntoConstraints = NO;
-    UIView *footer = [[UIView alloc] init];
-    [footer addSubview:link];
-    [NSLayoutConstraint activateConstraints:@[
-        [link.topAnchor constraintEqualToAnchor:footer.topAnchor],
-        [link.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:kPDTIconCenterX - glyph.size.width / 2.0],
-      ]];
-    return footer;
+    UIImageView *icon =
+            [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"info.circle" withConfiguration:size]];
+    icon.contentMode = UIViewContentModeCenter;
+    icon.tintColor = gray;
+    icon.frame = CGRectMake(kPDTIconCenterX - kPDTIconBox / 2.0, kPDTLinkCenterY - kPDTIconBox / 2.0, kPDTIconBox,
+                            kPDTIconBox);
+    [self addSubview:icon];
+
+    UILabel *title = [[UILabel alloc] init];
+    title.text = @"How it works";
+    title.font = PDTSettingsFont(15, NO);
+    title.textColor = gray;
+    CGSize fit = [title sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
+    title.frame = CGRectMake(kPDTTextInset, round(kPDTLinkCenterY - fit.height / 2.0), ceil(fit.width),
+                             ceil(fit.height));
+    [self addSubview:title];
+
+    self.isAccessibilityElement = YES;
+    self.accessibilityLabel = title.text;
+    self.accessibilityTraits = UIAccessibilityTraitButton;
+    [self addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    return self;
 }
+
+- (void)setHighlighted:(BOOL)highlighted {
+    [super setHighlighted:highlighted];
+    self.alpha = highlighted ? 0.5 : 1.0;
+}
+
+@end
 
 // A custom view rather than the system Done item, whose iOS 26 style ignores
 // tintColor and draws a washed-out checkmark. Same glyph as PrimeSenger's.
@@ -1541,8 +1563,8 @@ static NSInteger PDTBrokenCount(NSArray<PDTCompatResult *> *results) {
         _textToEdge,
         [_iconView.centerXAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDTIconCenterX],
         [_iconView.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
-        [_iconView.widthAnchor constraintEqualToConstant:24.0],
-        [_iconView.heightAnchor constraintEqualToConstant:24.0],
+        [_iconView.widthAnchor constraintEqualToConstant:kPDTIconBox],
+        [_iconView.heightAnchor constraintEqualToConstant:kPDTIconBox],
         [text.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:kPDTTextInset],
         [text.topAnchor constraintGreaterThanOrEqualToAnchor:content.topAnchor constant:11.0],
         [text.bottomAnchor constraintLessThanOrEqualToAnchor:content.bottomAnchor constant:-11.0],
@@ -2212,12 +2234,12 @@ static NSArray *PDTBuildMainSections(void) {
 }
 %new
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return section == (NSInteger)[self pdSections].count - 1 ? kPDTLinkFooterHeight : kPDTSectionGap;
+    return section == (NSInteger)[self pdSections].count - 1 ? kPDTLinkHeight : kPDTSectionGap;
 }
 %new
 - (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
     if (section != (NSInteger)[self pdSections].count - 1) return nil;
-    return PDTHowItWorksFooter(self, @selector(pdShowHowItWorks));
+    return [[PDTHowItWorksLink alloc] initWithTarget:self action:@selector(pdShowHowItWorks)];
 }
 %new
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -2247,9 +2269,14 @@ static NSArray *PDTBuildMainSections(void) {
 %new
 - (void)pdShowHowItWorks {
     PDTPresentHelpSheet(self, @"How it works", @[
-        PDTHelp(@"Reddit features", @"On: as in Reddit. Off: removed by PrimeDit.", PDTSymbol(@"eye")),
-        PDTHelp(@"PrimeDit features", @"On: added by PrimeDit. Off: as in Reddit.", PDTSymbol(@"sparkles")),
-        PDTHelp(@"Filter lists", @"Hide what matches a keyword, a subreddit or a muted user.",
+        PDTHelp(@"Switches",
+                @"On means you have what the switch names; off means you don't. "
+                @"With Promoted off, promoted posts no longer show in your feed.",
+                PDTSymbol(@"switch.2")),
+        PDTHelp(@"Info buttons", @"The info button next to a section title explains each switch in that section.",
+                PDTSymbol(@"info.circle")),
+        PDTHelp(@"Filter lists",
+                @"Add words, subreddits or usernames to these lists, and the posts and comments that match are hidden.",
                 PDTSymbol(@"line.3.horizontal.decrease.circle")),
     ]);
 }
