@@ -4,7 +4,7 @@
 
 static const NSInteger kPDSettingsButtonTag = 1337;
 
-// Adds the PrimeDit button to Reddit's own Settings screen, once per screen.
+// Adds the PrimeDit sparkles to Reddit's own Settings screen, once per screen.
 %hook UIViewController
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -15,12 +15,16 @@ static const NSInteger kPDSettingsButtonTag = 1337;
         return;
     for (UIBarButtonItem *item in self.navigationItem.rightBarButtonItems)
         if (item.tag == kPDSettingsButtonTag) return;
-    UIBarButtonItem *button = [[UIBarButtonItem alloc] initWithTitle:@"PrimeDit"
+    UIImageSymbolConfiguration *configuration =
+            [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightSemibold];
+    UIImage *glyph = [UIImage systemImageNamed:@"sparkles" withConfiguration:configuration];
+    UIBarButtonItem *button = [[UIBarButtonItem alloc] initWithImage:glyph
                                                                style:UIBarButtonItemStylePlain
                                                               target:self
                                                               action:@selector(pdOpenSettings)];
     button.tag = kPDSettingsButtonTag;
-    [button setTitlePositionAdjustment:UIOffsetMake(0, 3.5) forBarMetrics:UIBarMetricsDefault];
+    button.tintColor = UIColor.labelColor;
+    button.accessibilityLabel = @"PrimeDit";
     NSMutableArray *items = [self.navigationItem.rightBarButtonItems mutableCopy] ?: [NSMutableArray array];
     [items insertObject:button atIndex:0];
     self.navigationItem.rightBarButtonItems = items;

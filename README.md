@@ -11,7 +11,7 @@ Filters Reddit's feeds and tidies its interface. Built for Reddit 2026.38.
 - **Backup and reset** of all settings, cache size and auto-clear
 - **FLEX explorer** (fleXD), included in every build
 
-Settings are in Reddit's Settings, under the **PrimeDit** button.
+Settings are in Reddit's Settings, under the sparkles button.
 
 The .deb also works injected into an IPA (pyzule, cyan): its sideload fixes turn on only in a
 re-signed app.

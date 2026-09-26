@@ -377,8 +377,22 @@ static void PDStyleSettingsTable(UITableView *tableView) {
     [tableView registerClass:PDSettingsCell.class forCellReuseIdentifier:@"PDSettingsCell"];
 }
 
-// Credit under the last section of the main page, in the system's light gray.
-static UIView *PDCreditFooter(void) {
+// Under the last section of the main page: the "How it works" link, aligned
+// with the section titles, then the credit in the system's light gray.
+static UIView *PDSettingsFooter(id target, SEL action) {
+    UIButtonConfiguration *style = [UIButtonConfiguration plainButtonConfiguration];
+    UIImageSymbolConfiguration *glyph =
+            [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightRegular];
+    style.image = [UIImage systemImageNamed:@"info.circle" withConfiguration:glyph];
+    style.imagePadding = 6.0;
+    style.contentInsets = NSDirectionalEdgeInsetsZero;
+    style.baseForegroundColor = UIColor.linkColor;
+    style.attributedTitle = [[NSAttributedString alloc] initWithString:@"How it works"
+                                                            attributes:@{NSFontAttributeName : PDSettingsFont(15, NO)}];
+    UIButton *link = [UIButton buttonWithConfiguration:style primaryAction:nil];
+    link.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
+    [link addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    link.translatesAutoresizingMaskIntoConstraints = NO;
     UILabel *name = [[UILabel alloc] init];
     name.text = @"PrimeDit";
     name.font = PDSettingsFont(15, YES);
@@ -394,14 +408,32 @@ static UIView *PDCreditFooter(void) {
     stack.axis = UILayoutConstraintAxisVertical;
     stack.spacing = -2;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
-    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 100)];
+    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 140)];
+    [footer addSubview:link];
     [footer addSubview:stack];
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:footer.topAnchor constant:21],
+        [link.topAnchor constraintEqualToAnchor:footer.topAnchor constant:4],
+        [link.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
+        [link.heightAnchor constraintEqualToConstant:44],
+        [stack.topAnchor constraintEqualToAnchor:link.bottomAnchor constant:12],
         [stack.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor constant:20],
         [stack.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor constant:-20],
       ]];
     return footer;
+}
+
+// A custom view rather than the system Done item, whose iOS 26 style ignores
+// tintColor and draws a washed-out checkmark. Same glyph as PrimeSenger's.
+static UIBarButtonItem *PDDoneItem(id target, SEL action) {
+    UIImageSymbolConfiguration *check =
+            [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightSemibold];
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.frame = CGRectMake(0, 0, 44, 44);
+    button.tintColor = UIColor.labelColor;
+    button.accessibilityLabel = @"Done";
+    [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    [button setImage:[UIImage systemImageNamed:@"checkmark" withConfiguration:check] forState:UIControlStateNormal];
+    return [[UIBarButtonItem alloc] initWithCustomView:button];
 }
 
 static UIImage *PDRowIcon(NSArray<NSString *> *names) {
@@ -2184,9 +2216,32 @@ static NSArray *PDBuildMainSections(void) {
 - (void)viewDidLoad {
     %orig;
     self.title = @"PrimeDit";
+    self.navigationItem.rightBarButtonItem = PDDoneItem(self, @selector(pdDone));
     self.view.backgroundColor = UIColor.systemBackgroundColor;
     PDStyleSettingsTable(self.tableView);
-    self.tableView.tableFooterView = PDCreditFooter();
+    self.tableView.tableFooterView = PDSettingsFooter(self, @selector(pdShowHowItWorks));
+}
+// Closes Reddit's settings when they are a sheet, and steps back otherwise.
+%new
+- (void)pdDone {
+    UINavigationController *navigation = self.navigationController;
+    if (navigation.presentingViewController)
+        [navigation dismissViewControllerAnimated:YES completion:nil];
+    else
+        [navigation popViewControllerAnimated:YES];
+}
+// How the switches and lists read, for anyone who wonders.
+%new
+- (void)pdShowHowItWorks {
+    PDPresentHelpSheet(self, @"How it works", @[
+        PDHelp(@"Reddit features",
+               @"A switch named after something in Reddit shows it. Turn the switch off to hide it.",
+               PDSymbol(@"eye")),
+        PDHelp(@"PrimeDit features", @"A switch named after something PrimeDit adds turns it on.",
+               PDSymbol(@"sparkles")),
+        PDHelp(@"Filter lists", @"Keywords, subreddits and muted users hide the posts that match.",
+               PDSymbol(@"line.3.horizontal.decrease.circle")),
+    ]);
 }
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
