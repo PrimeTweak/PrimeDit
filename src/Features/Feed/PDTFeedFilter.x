@@ -192,7 +192,8 @@ static PDTCompatOption PDTDropReasonForNode(NSDictionary *node, PrimeDitPrefs pr
 
     if (prefs.promoted) {
         if ([t containsString:@"AdPost"] || [t containsString:@"ConversationAd"]) return PDTCompatPromoted;
-        if (PDTDictTruthy(node[@"isAdPost"]) || PDTDictTruthy(node[@"isCommercial"]) ||
+        if (PDTDictTruthy(node[@"isAdPost"]) || PDTDictTruthy(node[@"isAd"]) ||
+                PDTDictTruthy(node[@"isCommercial"]) ||
                 PDTDictTruthy(node[@"isPromoted"]) || PDTDictTruthy(node[@"isCreatedFromAdsUi"]))
             return PDTCompatPromoted;
         if ([node[@"adPayload"] isKindOfClass:NSDictionary.class] ||
